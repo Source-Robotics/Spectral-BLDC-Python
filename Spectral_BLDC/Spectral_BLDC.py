@@ -54,6 +54,7 @@ class SpectralCAN:
     SEND_POSITION_GAINS_ID = 19
     SEND_LIMITS_ID = 20
     SEND_KT_ID = 22
+    SEND_VOLTAGE_LIMIT_ID = 34
     SEND_CAN_ID = 11
     SEND_ESTOP_ID = 0
     SEND_IDLE_ID = 12
@@ -500,7 +501,16 @@ class SpectralCAN:
         _combined = bytearray(combined)
         self.communication.send_can_message(message_id = _canid, data = _combined)
         #logging.debug("Send new velocity and current limits")
-    
+
+    # Radi
+    def Send_Voltage_Limit(self,Voltage_limit):
+        _canid = util.combine_2_can_id(self.node_id,self.SEND_VOLTAGE_LIMIT_ID,0)
+        _v_limit = util.split_2_4_bytes(Voltage_limit)  # mV, 4-byte big-endian int (0 = use VBUS_mV)
+        combined = _v_limit
+        _combined = bytearray(combined)
+        self.communication.send_can_message(message_id = _canid, data = _combined)
+        #logging.debug("Send new voltage limit")
+
     # Radi
     def Send_Kt(self,Kt):
         _canid = util.combine_2_can_id(self.node_id,self.SEND_KT_ID,0)
