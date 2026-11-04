@@ -1,17 +1,17 @@
 # Spectral-BLDC
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)  ![Issues](https://img.shields.io/github/issues/PCrnjak/Spectral-BLDC-Python) ![release](https://img.shields.io/github/v/release/PCrnjak/Spectral-BLDC-Python)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)  ![Issues](https://img.shields.io/github/issues/Source-Robotics/Spectral-BLDC-Python) ![release](https://img.shields.io/github/v/release/Source-Robotics/Spectral-BLDC-Python)
 
-Python lib for controlling Spectral BLDC motor controllers over CAN bus. For more info about this API and all available commands check [DOCS](https://source-robotics.github.io/Spectral-BLDC-docs/apage7_can/)
+Python lib for controlling Spectral BLDC motor controllers over CAN bus. For more info about this API and all available commands check [DOCS](https://docs.source-robotics.com/Spectral-BLDC-docs/latest/06-operation/can/)
 
 # Related projects
 
 | Product | Description | Links |
 |---|---|---|
-| **Spectral Micro BLDC Controller** | Compact brushless motor controller with CAN bus, position/velocity/torque/impedance control modes | [GitHub](https://github.com/PCrnjak/Spectral-Micro-BLDC-controller) |
-| **SSG-48 Adaptive Electric Gripper** | Adaptive electric gripper controllable over CAN bus | [GitHub](https://github.com/PCrnjak/SSG-48-adaptive-electric-gripper) |
-| **MSG Gripper** | Compliant AI stepper gripper with force control, open-source firmware, GUI and Python API; designed for assembly tasks and AI training | [Store](https://source-robotics.com/products/msg-gripper) · [GitHub](https://github.com/PCrnjak/MSG-compliant-AI-stepper-gripper) · [Docs](https://source-robotics.github.io/MSG-gripper-docs/) |
-| **STEPFOC Stepper Controller** | FOC-based stepper motor controller that turns low-cost steppers into high-performance robotic servos; CAN & UART, 14-bit encoder, open-source | [Store](https://source-robotics.com/products/stepfoc-stepper-controller) · [GitHub](https://github.com/PCrnjak/STEPFOC-stepper-controller) · [Docs](https://source-robotics.github.io/STEPFOC-docs/) |
+| **Spectral Micro BLDC Controller** | Compact brushless motor controller with CAN bus, position/velocity/torque/impedance control modes | [GitHub](https://github.com/Source-Robotics/Spectral-Micro-BLDC-controller) |
+| **SSG-48 Adaptive Electric Gripper** | Adaptive electric gripper controllable over CAN bus | [GitHub](https://github.com/Source-Robotics/SSG-48-adaptive-electric-gripper) |
+| **MSG Gripper** | Compliant AI stepper gripper with force control, open-source firmware, GUI and Python API; designed for assembly tasks and AI training | [Store](https://source-robotics.com/products/msg-gripper) · [GitHub](https://github.com/Source-Robotics/MSG-compliant-AI-stepper-gripper) · [Docs](https://docs.source-robotics.com/MSG-gripper-docs/) |
+| **STEPFOC Stepper Controller** | FOC-based stepper motor controller that turns low-cost steppers into high-performance robotic servos; CAN & UART, 14-bit encoder, open-source | [Store](https://source-robotics.com/products/stepfoc-stepper-controller) · [GitHub](https://github.com/Source-Robotics/STEPFOC-stepper-controller) · [Docs](https://docs.source-robotics.com/STEPFOC-docs/) |
 
 # How to install
 
@@ -49,7 +49,7 @@ while True:
 
 # More examples
 
-Check out the [Examples folder](https://github.com/PCrnjak/Spectral-BLDC-Python/tree/main/examples) for more examples!
+Check out the [Examples folder](https://github.com/Source-Robotics/Spectral-BLDC-Python/tree/main/examples) for more examples!
 Available examples:
 * Send_respond_1
 * Get_encoder_data
