@@ -54,10 +54,3 @@ Available examples:
 * Send_respond_1
 * Get_encoder_data
 * SSG48_gripper_test
-
-
-
-This project is entirely open-source and free for all to use. Any support, whether through donations or advice, is greatly appreciated. Thank you!
-
- [![General badge](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/PCrnjak?locale.x=en_US)
-[![General badge](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/PCrnjak)
