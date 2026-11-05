@@ -18,8 +18,8 @@ setup(
     author_email="<info@source-robotics.com>",
     license = "MIT",
     project_urls = {
-        "Documentation": "https://source-robotics.github.io/PAROL-docs/",
-        "Source": "https://source-robotics.github.io/PAROL-docs/",
+        "Documentation": "https://docs.source-robotics.com/Spectral-BLDC-docs/",
+        "Source": "https://github.com/Source-Robotics/Spectral-BLDC-Python",
     },
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
