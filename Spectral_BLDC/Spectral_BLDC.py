@@ -81,7 +81,7 @@ class SpectralCAN:
     SEND_DATA_PACK_PD_ID = 4
     SEND_HALL_INDEX = 31
     SEND_RESPOND_KT_ID = 33
-    # Firmware 2026-11 (STEPFOC V109 / Spectral V108) and later
+    # Firmware 109 and later (both drivers share their version numbers from 109 on; the Spectral Micro has no 108)
     SEND_PARAMETER_ID = 36           # set a parameter: [number][value i32], no answer
     SEND_GET_PARAMETER_ID = 37       # ask for a parameter: [number]; the drive answers on 38
     RESPOND_PARAMETER_ID = 38        # [number][value i32], or [number] alone if the number is unknown
@@ -95,7 +95,7 @@ class SpectralCAN:
     PARAM_WD_AFTER_ACTION = 5        # after hold/descend: 0 legacy, 2 brake, 3 coast
     PARAM_WD_TIME = 6                # watchdog time ms, 0 = off
     PARAM_WD_ACTION = 7              # watchdog action 0-4
-    # Read-only (STEPFOC V109 / Spectral V108 feature batch 2): the values in force
+    # Read-only (firmware 109): the values in force
     PARAM_KPP = 8
     PARAM_KPV = 9
     PARAM_KIV = 10
@@ -120,9 +120,9 @@ class SpectralCAN:
     PARAM_CAPTURE_DIVIDER = 27       # control loops per sample, 1-65535
     PARAM_CAPTURE_TRIGGER = 28       # writing starts (TRIGGERS) or stops (0) a capture
     PARAM_CAPTURE_LEVEL = 29         # trigger level in channel A's units
-    PARAM_CAPTURE_PRETRIGGER = 30    # samples kept from before the trigger, 0-511
+    PARAM_CAPTURE_PRETRIGGER = 30    # samples kept from before the trigger, 0 to the capture length - 1 (1023)
     PARAM_CAPTURE_STATE = 31         # read-only, CAPTURE_STATES
-    PARAM_CAPTURE_COUNT = 32         # read-only, samples readable (0-512)
+    PARAM_CAPTURE_COUNT = 32         # read-only, samples readable (0 to the capture length, 1024)
     PARAM_CAPTURE_TRIGGER_INDEX = 33 # read-only, the trigger sample's index, -1 if not triggered
     PARAM_HIST_X = 34                # HISTOGRAM_X: writing 1/2 clears and starts, 0 stops
     PARAM_HIST_Y = 35                # the signal averaged per bin; set before PARAM_HIST_X
@@ -141,9 +141,11 @@ class SpectralCAN:
     PARAM_CURRENT_BANDWIDTH = 49     # current-loop bandwidth, Hz (10 to loop rate / 10): writing sets Kp_iq and
                                      # Ki_iq at once from the measured R and L; reading gives the bandwidth the
                                      # gains in force amount to (default 160 since firmware 2026-11 batch 7)
-    PARAM_SPEED_ESTIMATOR = 50       # the speed the loops use: SPEED_ESTIMATORS (firmware 2026-11 batch 8, RAM)
+    PARAM_SPEED_ESTIMATOR = 50       # the speed the loops use: SPEED_ESTIMATORS (firmware 2026-11 batch 8, RAM);
+                                     # default STEPFOC 2 (PLL direct), Spectral Micro 0 (moving average)
     SPEED_ESTIMATORS = {0: 'moving average', 1: 'PLL', 2: 'PLL direct'}
-    PARAM_SPEED_PLL_BANDWIDTH = 51   # the speed PLLs' natural frequency, Hz (10 to loop rate / 20; 160 = 1000 rad/s)
+    PARAM_SPEED_PLL_BANDWIDTH = 51   # the speed PLLs' natural frequency, Hz (10 to loop rate / 20; 160 = 1000 rad/s);
+                                     # default STEPFOC 60, Spectral Micro 160
     PARAM_COGCAL = 43                # write 1: identify the anti-cogging on the drive, 2: and save, 0: abort
     PARAM_COGCAL_SPEED = 44          # ticks/s the identification turns at (1500)
     PARAM_COGCAL_RIPPLE = 45         # read-only, the identified cogging current, rms, 0.1 mA
@@ -162,7 +164,7 @@ class SpectralCAN:
     PARAM_TRIM_H1_AFTER = 63         # read-only, and after it
     PARAM_COMM_DELAY_US = 64         # commutation delay compensation, us (0 = off, RAM; STEPFOC default 166 since batch 17)
     PARAM_FAST_TRIG = 65             # 1: the transforms' sin/cos from the integer table, 0: qfplib (default)
-    PARAM_PROFILE = {66: 'checks', 67: 'reading', 68: 'transforms', 69: 'control and PWM', 70: 'rest'}  # R, 0.1 us
+    PARAM_PROFILE = {66: 'checks', 67: 'reading', 68: 'transforms', 69: 'control and PWM', 70: 'rest'}  # R, 0.1 us; STEPFOC
     PARAM_FAST_READ = 71             # 1: the ADC reads and the encoder SPI by register (STEPFOC; default 1 since batch 16)
     PARAM_FAST_PWM = 72              # 1: the PWM compare registers written directly (STEPFOC; default 1 since batch 16)
     # The velocity-loop details (firmware batch 18), RAM, 0 = off (the default):
@@ -859,7 +861,7 @@ class SpectralCAN:
         #   'Descend' 4  apply the fallback current but never move faster than the fallback speed, for
         #                the fallback time, then the after-action: a joint under gravity lowers itself
         #                slowly, a gripper keeps its grip.
-        # Firmware before STEPFOC V109 / Spectral V108 stores the byte and ignores it. The action only
+        # Firmware before 109 stores the byte and ignores it. The action only
         # applies when the watchdog is the SOLE active error; any other fault always gets the legacy
         # response. Hold and descend only start if the drive was in a closed-loop mode at the trip.
         if _action not in self.WATCHDOG_ACTIONS:
