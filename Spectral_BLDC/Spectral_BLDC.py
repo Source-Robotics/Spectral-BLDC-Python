@@ -191,6 +191,7 @@ class SpectralCAN:
                                      # 25 queue playing, 26 samples playing, 27 the samples ran dry
     PARAM_SOUND_LIMIT_MV = 81        # the sound's voltage at most, mV (default 2000; 0 refuses sound)
     PARAM_SOUND_AXIS = 82            # 1: the q axis (a small torque ripple; default, much louder), 0: the d axis
+    PARAM_STACK_UNUSED = 83          # read-only: RAM the stack never reached since start, bytes (firmware 109)
     SOUND_QUEUE_FREE = 31            # events the drive's queue holds
     SOUND_BUFFER = 1023              # samples the drive's buffer holds
     # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
@@ -236,7 +237,7 @@ class SpectralCAN:
                        74: 'position input filter Hz',
                        75: 'velocity integral deadband ticks', 76: 'R milliohm', 77: 'L microhenry',
                        78: 'pole pairs', 79: 'features (bits)', 80: 'sound state (bits)',
-                       81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)'}
+                       81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)', 83: 'stack never used, bytes'}
     SEND_RESPOND_TELEMETRY_ID = 40   # remote frame: temperature, Vbus, both error bytes, Iq in one snapshot
     # Buffers (firmware 2026-11 batch 3): the capture, the histogram and the anti-cogging data
     SEND_BUFFER_READ_ID = 41         # [kind][first u16][count u16]; the drive answers with one frame per entry on 42
