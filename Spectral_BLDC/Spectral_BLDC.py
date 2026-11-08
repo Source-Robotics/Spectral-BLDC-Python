@@ -55,6 +55,8 @@ class SpectralCAN:
     SEND_LIMITS_ID = 20
     SEND_KT_ID = 22
     SEND_VOLTAGE_LIMIT_ID = 34
+    SEND_SETTINGS_ID = 35            # IN_SETTINGS: 2 bytes [mask, value]; firmware V107+
+    SETTINGS_BIT_BRAKE_COAST = 0x01  # bit 0: 1 = brake, 0 = coast (idle-mode phase behaviour)
     SEND_CAN_ID = 11
     SEND_ESTOP_ID = 0
     SEND_IDLE_ID = 12
@@ -79,6 +81,173 @@ class SpectralCAN:
     SEND_DATA_PACK_PD_ID = 4
     SEND_HALL_INDEX = 31
     SEND_RESPOND_KT_ID = 33
+    # Firmware 2026-11 (STEPFOC V109 / Spectral V108) and later
+    SEND_PARAMETER_ID = 36           # set a parameter: [number][value i32], no answer
+    SEND_GET_PARAMETER_ID = 37       # ask for a parameter: [number]; the drive answers on 38
+    RESPOND_PARAMETER_ID = 38        # [number][value i32], or [number] alone if the number is unknown
+    SEND_RESPOND_IDENTITY_ID = 39    # remote frame: product, tool, versions, pole pairs, calibrated, flags
+
+    # Parameter numbers (firmware constants.h PARAM_*); permanent once released
+    PARAM_TOOL_ID = 1                # 0 none, 1 SSG-48, 11-33 MSG, 200-254 custom
+    PARAM_WD_FALLBACK_TIME = 2       # ms watchdog hold/descend may run, 0-60000
+    PARAM_WD_FALLBACK_CURRENT = 3    # mA descend applies, signed
+    PARAM_WD_FALLBACK_SPEED = 4      # ticks/s, the speed cap of descend
+    PARAM_WD_AFTER_ACTION = 5        # after hold/descend: 0 legacy, 2 brake, 3 coast
+    PARAM_WD_TIME = 6                # watchdog time ms, 0 = off
+    PARAM_WD_ACTION = 7              # watchdog action 0-4
+    # Read-only (STEPFOC V109 / Spectral V108 feature batch 2): the values in force
+    PARAM_KPP = 8
+    PARAM_KPV = 9
+    PARAM_KIV = 10
+    PARAM_KPIQ = 11
+    PARAM_KIIQ = 12
+    PARAM_KP = 13
+    PARAM_KD = 14
+    PARAM_VELOCITY_LIMIT = 15
+    PARAM_CURRENT_LIMIT = 16
+    PARAM_VOLTAGE_LIMIT = 17
+    PARAM_BRAKE_COAST = 18
+    PARAM_HEARTBEAT_MS = 19
+    PARAM_KT = 20
+    PARAM_SENSE1_OFFSET = 21         # current-sense zero 1, counts from 2048 (1 count = 1.6 mA); writable (RAM) since batch 10
+    PARAM_SENSE2_OFFSET = 22
+    PARAM_ID_SETPOINT = 58           # the d-axis current setpoint, mA (RAM, as #Id): no torque, more phase current
+    PARAM_BOARD_PRODUCT = 23
+    # Capture, histogram, anti-cogging (firmware 2026-11 batch 3). Capture/histogram: RAM only.
+    PARAM_CAPTURE_SOURCE_A = 24      # signal of channel A (SIGNALS), also the trigger channel
+    PARAM_CAPTURE_SOURCE_B = 25
+    PARAM_CAPTURE_SOURCE_C = 26
+    PARAM_CAPTURE_DIVIDER = 27       # control loops per sample, 1-65535
+    PARAM_CAPTURE_TRIGGER = 28       # writing starts (TRIGGERS) or stops (0) a capture
+    PARAM_CAPTURE_LEVEL = 29         # trigger level in channel A's units
+    PARAM_CAPTURE_PRETRIGGER = 30    # samples kept from before the trigger, 0-511
+    PARAM_CAPTURE_STATE = 31         # read-only, CAPTURE_STATES
+    PARAM_CAPTURE_COUNT = 32         # read-only, samples readable (0-512)
+    PARAM_CAPTURE_TRIGGER_INDEX = 33 # read-only, the trigger sample's index, -1 if not triggered
+    PARAM_HIST_X = 34                # HISTOGRAM_X: writing 1/2 clears and starts, 0 stops
+    PARAM_HIST_Y = 35                # the signal averaged per bin; set before PARAM_HIST_X
+    PARAM_HIST_SAMPLES = 36          # read-only
+    PARAM_COGGING_MODE = 37          # COGGING_MODES; saved with the harmonics and table
+    PARAM_COGGING_SCALE = 38         # percent of the stored anti-cogging applied, 0-200
+    PARAM_CAPTURE_LENGTH = 39        # read-only, samples per channel a capture holds (1024; older builds 512, no answer)
+    PARAM_SENSE1_OFFSET_OFF = 40     # read-only, current-sense zero 1 measured with the bridge off (counts)
+    PARAM_SENSE2_OFFSET_OFF = 41     # read-only, current-sense zero 2 measured with the bridge off
+    PARAM_SENSE_ZERO_SWITCHING = 42  # read-only, the zero measured with the bridge switching: SENSE_ZERO_SWITCHING
+    SENSE_ZERO_SWITCHING = {0: 'not run', 1: 'measuring', 2: 'in use', 3: 'rejected', 4: 'interrupted',
+                            5: 'measured, not in use'}
+    PARAM_SENSE_ZERO_USE_SWITCHING = 46  # 1: use the zero measured with the bridge switching, 0: the bridge-off one
+    PARAM_SENSE1_OFFSET_SW = 47      # read-only, current-sense zero 1 measured with the bridge switching (counts)
+    PARAM_SENSE2_OFFSET_SW = 48      # read-only, current-sense zero 2 measured with the bridge switching
+    PARAM_CURRENT_BANDWIDTH = 49     # current-loop bandwidth, Hz (10 to loop rate / 10): writing sets Kp_iq and
+                                     # Ki_iq at once from the measured R and L; reading gives the bandwidth the
+                                     # gains in force amount to (default 160 since firmware 2026-11 batch 7)
+    PARAM_SPEED_ESTIMATOR = 50       # the speed the loops use: SPEED_ESTIMATORS (firmware 2026-11 batch 8, RAM)
+    SPEED_ESTIMATORS = {0: 'moving average', 1: 'PLL', 2: 'PLL direct'}
+    PARAM_SPEED_PLL_BANDWIDTH = 51   # the speed PLLs' natural frequency, Hz (10 to loop rate / 20; 160 = 1000 rad/s)
+    PARAM_COGCAL = 43                # write 1: identify the anti-cogging on the drive, 2: and save, 0: abort
+    PARAM_COGCAL_SPEED = 44          # ticks/s the identification turns at (1500)
+    PARAM_COGCAL_RIPPLE = 45         # read-only, the identified cogging current, rms, 0.1 mA
+    COGCAL_STATES = {0: 'idle', 1: 'turning forward', 2: 'turning backward', 3: 'done', 4: 'aborted',
+                     5: 'failed: error or not calibrated', 6: 'failed: the shaft did not turn',
+                     7: 'measuring the encoder table first', 8: 'failed: the encoder table',
+                     9: 'failed: the current-sense trim did not help (zeros put back)',
+                     10: 'off: the encoder table was measured again on its own; identify again',
+                     11: 'done, without the current-sense trim (it did not lower the 1st harmonic)'}
+    # The current-sense zero trim (batch 11): PARAM_COGCAL = 4 identifies, corrects the zeros from the 1st harmonic
+    # and identifies again; 5 also saves.
+    PARAM_ZERO_TRIM1 = 59            # the trim of current-sense zero 1, counts (saved; added at every start)
+    PARAM_ZERO_TRIM2 = 60
+    PARAM_THETA_OFFSET = 61          # read-only, the electrical offset, 0.1 deg electrical
+    PARAM_TRIM_H1_BEFORE = 62        # read-only, the 1st harmonic before the last trim, 0.1 mA
+    PARAM_TRIM_H1_AFTER = 63         # read-only, and after it
+    PARAM_COMM_DELAY_US = 64         # commutation delay compensation, us (0 = off, RAM; STEPFOC default 166 since batch 17)
+    PARAM_FAST_TRIG = 65             # 1: the transforms' sin/cos from the integer table, 0: qfplib (default)
+    PARAM_PROFILE = {66: 'checks', 67: 'reading', 68: 'transforms', 69: 'control and PWM', 70: 'rest'}  # R, 0.1 us
+    PARAM_FAST_READ = 71             # 1: the ADC reads and the encoder SPI by register (STEPFOC; default 1 since batch 16)
+    PARAM_FAST_PWM = 72              # 1: the PWM compare registers written directly (STEPFOC; default 1 since batch 16)
+    # The velocity-loop details (firmware batch 18), RAM, 0 = off (the default):
+    # 73 (an anti-windup decay, batch 18) was removed in batch 19
+    PARAM_INPUT_FILTER_HZ = 74       # the position input filter, true Hz, position and PD modes; about the host's
+                                     # setpoint rate / 12 (8 for 100 Hz); for hosts that send no speed
+    PARAM_VEL_INT_DEADBAND = 75      # ticks: the velocity integral sees the position error less this band
+    # The motor (firmware batch 20), as #R, #L, #PP; saved by Save config. The current gains follow at the next
+    # calibration (or a write of PARAM_CURRENT_BANDWIDTH).
+    PARAM_R_MOHM = 76                # phase resistance, milliohm
+    PARAM_L_UH = 77                  # phase inductance, microhenry
+    PARAM_POLE_PAIRS = 78            # pole pairs, only while idle; calibrate after a change
+    PARAM_FEATURES = 79              # read-only bits: what is in force and what runs (FEATURES; batch 20)
+    FEATURES = {0: 'calibrated', 1: 'encoder table measured', 2: 'encoder table in use',
+                3: 'anti-cogging identified', 4: 'anti-cogging on', 5: 'anti-cogging as the table',
+                6: 'anti-cogging saved', 7: 'current-sense zero trim', 8: 'switching zero in use',
+                9: 'delay compensation', 10: 'speed PLL', 11: 'fast reading', 12: 'fast PWM',
+                13: 'fast sin/cos', 14: 'input filter', 15: 'integral deadband',
+                20: 'calibration running', 21: 'encoder table running', 22: 'anti-cogging running',
+                23: 'runs after the calibration pending'}  # bits 16-17: parameter 56
+    # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
+    # correction of the encoder, saved in its own EEPROM block. PARAM_COGCAL or PARAM_ENCAL = 3 runs it, then the
+    # anti-cogging, and saves both.
+    PARAM_ENCAL = 52                 # write 1: measure and use, 2: and save, 3: then the anti-cogging, save all; 0 abort
+    PARAM_ENCAL_USE = 53             # 1: correct the encoder with the table (only if one was measured)
+    PARAM_ENCAL_PP = 54              # read-only, the table's error peak to peak, 0.01 deg of the shaft
+    PARAM_ENCAL_ONCE = 55            # read-only, its once-per-turn part, 0.01 deg of the shaft
+    PARAM_AFTER_CAL = 56             # what runs after a successful calibration: AFTER_CAL (saved with the table);
+                                     # STEPFOC default 'both' since batch 20 (then saves everything), Spectral 'nothing'
+    PARAM_ENCAL_OFFSET = 57          # read-only, how far the last run moved the electrical offset, 0.1 deg electrical
+    ENCAL_STATES = {0: 'idle', 1: 'turning forward', 2: 'turning backward', 3: 'done', 4: 'aborted',
+                    5: 'failed: error or not calibrated', 6: 'failed: the rotor did not follow',
+                    7: 'rejected: implausible'}
+    AFTER_CAL = {0: 'nothing', 1: 'anti-cogging', 2: 'encoder table and anti-cogging'}
+    # Parameters whose 4 value bytes are an IEEE-754 float (the bit pattern), not an int32
+    FLOAT_PARAMETERS = {8, 9, 10, 11, 12, 13, 14, 15, 16, 20}
+    PARAMETER_NAMES = {1: 'tool id', 2: 'watchdog fallback time ms', 3: 'watchdog fallback current mA',
+                       4: 'watchdog fallback speed ticks/s', 5: 'watchdog after-action', 6: 'watchdog time ms',
+                       7: 'watchdog action', 8: 'position gain Kpp', 9: 'velocity gain Kpv', 10: 'velocity gain Kiv',
+                       11: 'current gain Kpiq', 12: 'current gain Kiiq', 13: 'PD stiffness KP', 14: 'PD damping KD',
+                       15: 'velocity limit ticks/s', 16: 'current limit mA', 17: 'voltage limit mV',
+                       18: 'brake on idle', 19: 'heartbeat ms', 20: 'Kt', 21: 'current-sense zero 1 (counts)',
+                       22: 'current-sense zero 2 (counts)', 23: 'board product stamp',
+                       24: 'capture source A', 25: 'capture source B', 26: 'capture source C',
+                       27: 'capture divider (loops)', 28: 'capture trigger', 29: 'capture level',
+                       30: 'capture pre-trigger', 31: 'capture state', 32: 'capture count',
+                       33: 'capture trigger index', 34: 'histogram x', 35: 'histogram y', 36: 'histogram samples',
+                       37: 'anti-cogging mode', 38: 'anti-cogging scale %', 39: 'capture length',
+                       40: 'current-sense zero 1, bridge off (counts)', 41: 'current-sense zero 2, bridge off (counts)',
+                       42: 'current-sense zero with the bridge switching', 43: 'anti-cogging identification',
+                       44: 'identification speed ticks/s', 45: 'identified cogging, 0.1 mA rms',
+                       46: 'use the switching zero', 47: 'current-sense zero 1, switching (counts)',
+                       48: 'current-sense zero 2, switching (counts)', 49: 'current-loop bandwidth Hz',
+                       50: 'speed estimate (0 average, 1 PLL, 2 direct PLL)', 51: 'speed PLL bandwidth Hz',
+                       52: 'encoder table', 53: 'use the encoder table', 54: 'encoder error p-p, 0.01 deg',
+                       55: 'encoder error once per turn, 0.01 deg', 56: 'after calibration',
+                       57: 'encoder offset move, 0.1 deg electrical', 58: 'Id setpoint mA',
+                       59: 'zero trim 1 (counts)', 60: 'zero trim 2 (counts)', 61: 'theta offset, 0.1 deg el',
+                       62: '1st harmonic before the trim, 0.1 mA', 63: '1st harmonic after the trim, 0.1 mA',
+                       64: 'commutation delay us', 65: 'fast sin/cos', 71: 'fast reading', 72: 'fast PWM',
+                       74: 'position input filter Hz',
+                       75: 'velocity integral deadband ticks', 76: 'R milliohm', 77: 'L microhenry',
+                       78: 'pole pairs', 79: 'features (bits)'}
+    SEND_RESPOND_TELEMETRY_ID = 40   # remote frame: temperature, Vbus, both error bytes, Iq in one snapshot
+    # Buffers (firmware 2026-11 batch 3): the capture, the histogram and the anti-cogging data
+    SEND_BUFFER_READ_ID = 41         # [kind][first u16][count u16]; the drive answers with one frame per entry on 42
+    RESPOND_BUFFER_DATA_ID = 42      # [kind << 13 | index (u16)][6 bytes, by kind]
+    SEND_BUFFER_WRITE_ID = 43        # the 42 layout; anti-cogging harmonics and table only
+    BUFFER_CAPTURE = 0               # 3 channels (i16) per sample, oldest first, up to the capture length
+    BUFFER_HISTOGRAM = 1             # count (u16), sum (i32) per bin; 256 bins
+    BUFFER_COGGING_HARMONICS = 2     # harmonic, a (mA), b (mA) per slot; 8 slots
+    BUFFER_COGGING_TABLE = 3         # 256 values (mA) per electrical turn, 3 per frame
+    BUFFER_ENCODER_TABLE = 4         # 128 values (1/16 count) per shaft turn, 3 per frame; read only (batch 9)
+    BUFFER_LENGTHS = {0: 1024, 1: 256, 2: 8, 3: 256, 4: 128}   # capture: the most a capture holds (parameter 39)
+    SIGNALS = {'none': 0, 'iq': 1, 'id': 2, 'iq_setpoint': 3, 'velocity': 4, 'velocity_16': 5, 'position': 6,
+               'position_error': 7, 'electrical_angle': 8, 'encoder': 9, 'vbus_10mV': 10, 'sense1': 11,
+               'sense2': 12, 'loop_time_us': 13, 'cogging_ff': 14, 'iq_setpoint_loop': 15, 'uq_mV': 16,
+               'ud_applied': 17, 'uq_applied': 18}
+    TRIGGERS = {'stop': 0, 'now': 1, 'error': 2, 'rising': 3, 'falling': 4}
+    CAPTURE_STATES = {0: 'idle', 1: 'armed', 2: 'recording', 3: 'done'}
+    HISTOGRAM_X = {'off': 0, 'electrical': 1, 'encoder': 2}
+    COGGING_MODES = {'off': 0, 'harmonics': 1, 'table': 2}
+
+    PRODUCT_NAMES = {1: 'STEPFOC', 2: 'Spectral Micro'}
+    WATCHDOG_ACTIONS = {'Idle': 0, 'Hold': 1, 'Brake': 2, 'Coast': 3, 'Descend': 4}
 
     SEND_GRIPPER_DATA_PACK_ID = 61
     SEND_GRIPPER_CALIBRATE_ID = 62
@@ -142,6 +311,25 @@ class SpectralCAN:
 
         self.DLC_warrning = None
 
+
+        # Identity and settings block 2 (firmware 2026-11 and later)
+        self.product_id = None
+        self.product_name = None
+        self.tool_id = None
+        self.firmware_version = None
+        self.identity_hardware_version = None
+        self.pole_pairs = None
+        self.identity_calibrated = None
+        self.identity_flags = None
+        self.watchdog_fallback = None   # (time_ms, current_mA, speed_ticks_s, after_action)
+        self.parameters = {}            # parameter number -> value, from RESPOND_PARAMETER_ID
+        self.unknown_parameter = None   # the last number the drive did not know
+        self.wrong_product = None       # error byte 2 bit 3: this firmware is on the other product's board
+        self.capture = {}               # sample index -> (A, B, C), from RESPOND_BUFFER_DATA_ID
+        self.histogram = {}             # bin -> (count, sum)
+        self.cogging_harmonics = {}     # slot -> (harmonic, a mA, b mA)
+        self.cogging_table = {}         # entry -> mA
+        self.encoder_table = {}         # entry -> 1/16 count
 
         # Configuration variables
         self._velocity_limit = 0
@@ -253,7 +441,9 @@ class SpectralCAN:
                     byte1 = util.split_2_bitfield(message.data[3])
                     self.gripper_activated = byte1[0]
                     self.gripper_action_status = byte1[1]
-                    self.gripper_object_detection = util.combine_bits(byte1[2],byte1[3])
+                    # The firmware packs the value's low bit first (byte1[2]) and its high bit second
+                    # (byte1[3]); 1.20 combined them the other way round, which swapped 1 and 2.
+                    self.gripper_object_detection = util.combine_bits(byte1[3],byte1[2])
                     self.gripper_temperature_error = byte1[4]
                     self.gripper_timeout_error = byte1[5]
                     self.gripper_estop_error = byte1[6]
@@ -319,6 +509,93 @@ class SpectralCAN:
                 #logging.debug(f"Voltage is: {self.voltage}")
 
 
+            case self.RESPOND_PARAMETER_ID:
+                if message.dlc == 5:
+                    number = message.data[0]
+                    if number in self.FLOAT_PARAMETERS:
+                        value = struct.unpack('>f', bytes(message.data[1:5]))[0]
+                    else:
+                        value = int.from_bytes(bytes(message.data[1:5]), 'big', signed=True)
+                    self.parameters[number] = value
+                    if number == self.PARAM_TOOL_ID:
+                        self.tool_id = value
+                    self.watchdog_fallback = tuple(self.parameters.get(n) for n in (
+                        self.PARAM_WD_FALLBACK_TIME, self.PARAM_WD_FALLBACK_CURRENT,
+                        self.PARAM_WD_FALLBACK_SPEED, self.PARAM_WD_AFTER_ACTION))
+                elif message.dlc == 1:
+                    self.unknown_parameter = message.data[0]
+                else:
+                    self.DLC_warrning = 1
+
+            case self.RESPOND_BUFFER_DATA_ID:
+                if message.dlc == 8:
+                    d = bytes(message.data)
+                    header = int.from_bytes(d[0:2], 'big')
+                    kind, index = header >> 13, header & 0x1FFF
+                    v = [int.from_bytes(d[k:k + 2], 'big', signed=True) for k in (2, 4, 6)]
+                    if kind == self.BUFFER_CAPTURE:
+                        self.capture[index] = tuple(v)
+                    elif kind == self.BUFFER_HISTOGRAM:
+                        self.histogram[index] = (int.from_bytes(d[2:4], 'big'), int.from_bytes(d[4:8], 'big', signed=True))
+                    elif kind == self.BUFFER_COGGING_HARMONICS:
+                        self.cogging_harmonics[index] = (int.from_bytes(d[2:4], 'big'), v[1], v[2])
+                    elif kind == self.BUFFER_COGGING_TABLE:
+                        for k in range(3):
+                            if index + k < self.BUFFER_LENGTHS[self.BUFFER_COGGING_TABLE]:
+                                self.cogging_table[index + k] = v[k]
+                    elif kind == self.BUFFER_ENCODER_TABLE:
+                        for k in range(3):
+                            if index + k < self.BUFFER_LENGTHS[self.BUFFER_ENCODER_TABLE]:
+                                self.encoder_table[index + k] = v[k]
+                else:
+                    self.DLC_warrning = 1
+
+            case self.SEND_RESPOND_TELEMETRY_ID:
+                if message.dlc == 8:
+                    self.temperature = util.fuse_2_bytes(b'\x00' + b'\x00' + message.data[0:2])
+                    self.voltage = util.fuse_2_bytes(b'\x00' + b'\x00' + message.data[2:4])
+                    byte1 = util.split_2_bitfield(message.data[4])
+                    byte2 = util.split_2_bitfield(message.data[5])
+                    self.error = byte1[0]
+                    self.temperature_error = byte1[1]
+                    self.encoder_error = byte1[2]
+                    self.vbus_error = byte1[3]
+                    self.driver_error = byte1[4]
+                    self.velocity_error = byte1[5]
+                    self.current_error = byte1[6]
+                    self.estop_error = byte1[7]
+                    self.calibrated = byte2[0]
+                    self.activated = byte2[1]
+                    self.watchdog_error = byte2[2]
+                    self.wrong_product = byte2[3]
+                    self.current = util.fuse_2_bytes(b'\x00' + b'\x00' + message.data[6:8])
+                else:
+                    self.DLC_warrning = 1
+
+            case self.SEND_RESPOND_IDENTITY_ID:
+                if message.dlc == 8:
+                    self.product_id = message.data[0]
+                    self.product_name = self.PRODUCT_NAMES.get(message.data[0], 'unknown')
+                    self.tool_id = message.data[1]
+                    self.firmware_version = (message.data[2] << 8) | message.data[3]
+                    self.identity_hardware_version = message.data[4]
+                    self.pole_pairs = message.data[5]
+                    self.identity_calibrated = message.data[6]
+                    # bit 0 (least significant) I_AM_GRIPPER, bit 1 brake on idle,
+                    # bit 2 commutation reversed, bit 3 settings block 2 available
+                    self.identity_flags = {
+                        'gripper': bool(message.data[7] & 0x01),
+                        'brake_on_idle': bool(message.data[7] & 0x02),
+                        'commutation_reversed': bool(message.data[7] & 0x04),
+                        'settings_block2': bool(message.data[7] & 0x08),
+                        'wrong_product': bool(message.data[7] & 0x10),
+                        'sense_zero_measured': bool(message.data[7] & 0x20),
+                        'anti_cogging_saved': bool(message.data[7] & 0x40),
+                        'sense_zero_switching': bool(message.data[7] & 0x80),
+                    }
+                else:
+                    self.DLC_warrning = 1
+
             case self.SEND_RESPOND_KT_ID:
                 if message.dlc == 4:
                     self.Kt = struct.unpack('>f', bytes(message.data[0:4]))[0]
@@ -341,6 +618,7 @@ class SpectralCAN:
                     self.calibrated = byte2[0]
                     self.activated = byte2[1]
                     self.watchdog_error = byte2[2]
+                    self.wrong_product = byte2[3]
 
 
                 else:
@@ -559,17 +837,42 @@ class SpectralCAN:
 
     # Radi
     def Send_Watchdog(self,_rate,_action = 'Idle'):
-        if _action == 'Idle':
-            _action_byte = bytes([0x00])
-        elif _action == 'Hold':
-            _action_byte = bytes([0x01])
-        elif _action == 'Brake':
-            _action_byte = bytes([0x02])
-        
+        # What the driver does when the watchdog trips (_rate ms without a frame; 0 = off).
+        #   'Idle'    0  legacy: whatever that firmware always did (STEPFOC brakes, Spectral coasts).
+        #                The default, so an unmodified host behaves exactly as before.
+        #   'Hold'    1  hold the position the joint had at the trip, for the fallback time, then the
+        #                after-action (see Send_Watchdog_Fallback).
+        #   'Brake'   2  short the phases.
+        #   'Coast'   3  phases Hi-Z.
+        #   'Descend' 4  apply the fallback current but never move faster than the fallback speed, for
+        #                the fallback time, then the after-action: a joint under gravity lowers itself
+        #                slowly, a gripper keeps its grip.
+        # Firmware before STEPFOC V109 / Spectral V108 stores the byte and ignores it. The action only
+        # applies when the watchdog is the SOLE active error; any other fault always gets the legacy
+        # response. Hold and descend only start if the drive was in a closed-loop mode at the trip.
+        if _action not in self.WATCHDOG_ACTIONS:
+            raise ValueError("Send_Watchdog: unknown action %r (use one of %s)" % (_action, ', '.join(self.WATCHDOG_ACTIONS)))
+        _action_byte = bytes([self.WATCHDOG_ACTIONS[_action]])
+
         _canid = util.combine_2_can_id(self.node_id,self.SEND_WATCHDOG_ID,0)
         watch_time = util.split_2_4_bytes(_rate)
         _combined = bytearray(watch_time + _action_byte)
         self.communication.send_can_message(message_id = _canid, data = _combined)
+
+    # Radi
+    def Send_Settings(self, mask, value):
+        # Firmware V107+. Sets the bits selected by `mask` to the matching bits of `value`; bits
+        # outside the mask are left alone. Exactly 2 bytes -- Spectral BLDC rejects any other length.
+        _canid = util.combine_2_can_id(self.node_id,self.SEND_SETTINGS_ID,0)
+        self.communication.send_can_message(message_id = _canid, data = bytearray([mask & 0xFF, value & 0xFF]))
+
+    # Radi
+    def Send_Brake_Coast(self, brake):
+        # Idle-mode phase behaviour: True = brake (phases shorted), False = coast (Hi-Z).
+        # Runtime only: no firmware stores brake_coast in EEPROM (Send_Save_config does NOT persist it),
+        # so it returns to the firmware default at every power-up -- resend it after each boot.
+        bit = self.SETTINGS_BIT_BRAKE_COAST
+        self.Send_Settings(bit, bit if brake else 0)
 
     # Radi
     def Send_Heartbeat_Setup(self,_rate):
@@ -614,6 +917,165 @@ class SpectralCAN:
         _canid = util.combine_2_can_id(self.node_id,self.SEND_RESPOND_ENCODER_DATA_ID,0)
         self.communication.send_can_message(message_id = _canid, remote_frame = True)
         #logging.debug("Request encoder data")
+
+    def Send_Parameter(self, number, value):
+        # Set parameter `number` (PARAM_*) to `value` (int32). No answer: read it back with
+        # Send_Get_Parameter. Firmware clamps values outside a parameter's range. Saved with Send_Save_config.
+        if not (0 <= number <= 255 and -2**31 <= value < 2**31):
+            raise ValueError('Send_Parameter: number 0-255, value int32')
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_PARAMETER_ID, 0)
+        data = bytearray([number]) + bytearray(int(value).to_bytes(4, 'big', signed=True))
+        self.communication.send_can_message(message_id=_canid, data=data)
+
+    def Send_Get_Parameter(self, number):
+        # The drive answers on RESPOND_PARAMETER_ID; the value lands in self.parameters[number]
+        # (self.unknown_parameter if the firmware does not know the number).
+        if not 0 <= number <= 255:
+            raise ValueError('Send_Get_Parameter: number 0-255')
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_GET_PARAMETER_ID, 0)
+        self.communication.send_can_message(message_id=_canid, data=bytearray([number]))
+
+    def Send_Watchdog_Fallback(self, time_ms, current_mA=0, speed=1000, after='Idle'):
+        # Parameters of watchdog 'Hold' and 'Descend', as four parameter frames:
+        #   time_ms    how long hold/descend may run (the firmware clamps to 60000)
+        #   current_mA the current 'Descend' applies (signed; 0 = let gravity do it)
+        #   speed      the speed cap of 'Descend' in encoder ticks/s, either direction (16384 ticks = 1 turn)
+        #   after      what follows: 'Idle' (legacy), 'Brake' or 'Coast'
+        after_bytes = {'Idle': 0, 'Brake': 2, 'Coast': 3}
+        if after not in after_bytes:
+            raise ValueError("Send_Watchdog_Fallback: after must be 'Idle', 'Brake' or 'Coast', not %r" % (after,))
+        self.Send_Parameter(self.PARAM_WD_FALLBACK_TIME, time_ms)
+        self.Send_Parameter(self.PARAM_WD_FALLBACK_CURRENT, current_mA)
+        self.Send_Parameter(self.PARAM_WD_FALLBACK_SPEED, speed)
+        self.Send_Parameter(self.PARAM_WD_AFTER_ACTION, after_bytes[after])
+
+    def Send_Respond_Watchdog_Fallback(self):
+        # Four answers; self.watchdog_fallback becomes (time_ms, current_mA, speed, after_action).
+        for number in (self.PARAM_WD_FALLBACK_TIME, self.PARAM_WD_FALLBACK_CURRENT,
+                       self.PARAM_WD_FALLBACK_SPEED, self.PARAM_WD_AFTER_ACTION):
+            self.Send_Get_Parameter(number)
+
+    def Send_Tool_ID(self, tool_id):
+        # What the drive is built into: 0 none, 1 SSG-48, 11-33 MSG (tens = rail 1/2/3 = 100/150/200 mm,
+        # units = stepper 1/2/3 = 21.5/40/60 mm), 200-254 custom. Saved with Send_Save_config.
+        if not 0 <= tool_id <= 255:
+            raise ValueError('Send_Tool_ID: 0-255')
+        self.Send_Parameter(self.PARAM_TOOL_ID, tool_id)
+
+    def Send_Respond_Tool_ID(self):
+        self.Send_Get_Parameter(self.PARAM_TOOL_ID)
+
+    def _named(self, value, names, what):
+        if isinstance(value, str):
+            if value not in names:
+                raise ValueError(f"unknown {what} {value!r}; use one of {list(names)}")
+            return names[value]
+        return int(value)
+
+    def Send_Buffer_Read(self, kind, first=0, count=None):
+        # Ask for buffer entries (BUFFER_*). The drive sends one frame per entry on RESPOND_BUFFER_DATA_ID (the
+        # table: one per 3 values) as fast as the bus takes them, filling self.capture, self.histogram,
+        # self.cogging_harmonics or self.cogging_table. Firmware 2026-11 batch 3 and later.
+        if count is None:
+            count = self.BUFFER_LENGTHS[kind] - first
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_BUFFER_READ_ID, 0)
+        data = bytes([kind]) + int(first).to_bytes(2, 'big') + int(count).to_bytes(2, 'big')
+        self.communication.send_can_message(message_id=_canid, data=bytearray(data))
+
+    def _send_buffer_frame(self, kind, index, values):
+        for v in values:
+            if not -32768 <= int(v) <= 32767:
+                raise ValueError(f"{v} does not fit in 16 bits")
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_BUFFER_WRITE_ID, 0)
+        data = ((kind << 13) | (index & 0x1FFF)).to_bytes(2, 'big')
+        data += b''.join(int(v).to_bytes(2, 'big', signed=True) for v in values)
+        self.communication.send_can_message(message_id=_canid, data=bytearray(data))
+
+    def Send_Cogging_Harmonic(self, slot, harmonic, a, b):
+        # Anti-cogging slot 0-7: a*cos(h*angle) + b*sin(h*angle) mA, angle = the electrical angle from the encoder
+        # (SIGNALS['electrical_angle'], 16384 per turn). Harmonic 0 clears the slot, 1-32 allowed. RAM until
+        # Send_Save_config(); applied when the mode is 'harmonics'.
+        if not 0 <= slot < 8 or not 0 <= harmonic <= 32:
+            raise ValueError("slot 0-7, harmonic 0-32")
+        self._send_buffer_frame(self.BUFFER_COGGING_HARMONICS, slot, (harmonic, a, b))
+
+    def Send_Cogging_Table(self, values, first=0):
+        # Anti-cogging table values in mA (256 per electrical turn, value i at angle i * 64), three per frame,
+        # from entry `first`. RAM until Send_Save_config(); applied when the mode is 'table'. Every frame
+        # writes 3 entries, so at least 3 values; the last frame overlaps the one before instead of padding.
+        values = [int(round(v)) for v in values]
+        if first < 0 or first + len(values) > 256:
+            raise ValueError("the table has 256 entries")
+        if len(values) < 3:
+            raise ValueError("write at least 3 consecutive values (each frame carries 3)")
+        starts = list(range(0, len(values) - 2, 3))
+        if starts[-1] + 3 < len(values):
+            starts.append(len(values) - 3)
+        for i in starts:
+            self._send_buffer_frame(self.BUFFER_COGGING_TABLE, first + i, values[i:i + 3])
+
+    @classmethod
+    def decode_features(cls, value):
+        # PARAM_FEATURES (79) as a list of names, then 'after calibration: ...' from bits 16-17.
+        names = [n for b, n in cls.FEATURES.items() if value is not None and value >> b & 1]
+        after = (value >> 16) & 3 if value is not None else 0
+        names.append('after calibration: ' + {0: 'nothing', 1: 'anti-cogging', 2: 'encoder table and anti-cogging'}.get(after, str(after)))
+        return names
+
+    def Send_Cogging_Mode(self, mode, scale=None):
+        # 'off', 'harmonics' or 'table' (or 0-2); scale in percent (0-200) of the stored values. Saved by Send_Save_config().
+        # Since firmware batch 18 a mode the set holds nothing for is refused (it stays as it was; no answer, read
+        # PARAM_COGGING_MODE back): load or identify the set first.
+        self.Send_Parameter(self.PARAM_COGGING_MODE, self._named(mode, self.COGGING_MODES, 'mode'))
+        if scale is not None:
+            self.Send_Parameter(self.PARAM_COGGING_SCALE, int(scale))
+
+    def Send_Capture_Setup(self, a='velocity', b='iq', c='electrical_angle', divider=1, pretrigger=0, level=0):
+        # Channels (SIGNALS names or numbers), control loops per sample, samples kept before the trigger, the
+        # trigger level (channel A's units). Start with Send_Capture_Trigger().
+        for n, s in zip((self.PARAM_CAPTURE_SOURCE_A, self.PARAM_CAPTURE_SOURCE_B, self.PARAM_CAPTURE_SOURCE_C), (a, b, c)):
+            self.Send_Parameter(n, self._named(s, self.SIGNALS, 'signal'))
+        self.Send_Parameter(self.PARAM_CAPTURE_DIVIDER, int(divider))
+        self.Send_Parameter(self.PARAM_CAPTURE_PRETRIGGER, int(pretrigger))
+        self.Send_Parameter(self.PARAM_CAPTURE_LEVEL, int(level))
+
+    def Send_Capture_Trigger(self, trigger):
+        # 'now', 'error', 'rising', 'falling' start a capture; 'stop' stops it (the data stays).
+        self.Send_Parameter(self.PARAM_CAPTURE_TRIGGER, self._named(trigger, self.TRIGGERS, 'trigger'))
+
+    def Send_Histogram(self, x, y=None):
+        # Start a histogram over x ('electrical' or 'encoder', 256 bins; clears it) of signal y, or stop it ('off').
+        if y is not None:
+            self.Send_Parameter(self.PARAM_HIST_Y, self._named(y, self.SIGNALS, 'signal'))
+        self.Send_Parameter(self.PARAM_HIST_X, self._named(x, self.HISTOGRAM_X, 'histogram x'))
+
+    def Send_Cogging_Calibrate(self, save=False, speed=None, trim=False):
+        # Identify the anti-cogging on the drive itself: it turns one motor turn each way (the shaft must be free to
+        # turn), fits the harmonics and the table, switches the harmonics on and with save=True saves. Read
+        # PARAM_COGCAL for the state (COGCAL_STATES). A motion command aborts it. Firmware 2026-11 batch 5 and later.
+        if speed is not None:
+            self.Send_Parameter(self.PARAM_COGCAL_SPEED, int(speed))
+        # trim=True (firmware batch 11): first correct the current-sense zeros from the 1st harmonic, then again.
+        self.Send_Parameter(self.PARAM_COGCAL, (5 if save else 4) if trim else (2 if save else 1))
+
+    def Send_Encoder_Calibrate(self, save=False, then_cogging=False):
+        # Measure the encoder table on the drive itself: it turns the field open loop one shaft turn each way (about
+        # 20 s; the shaft must be free), fits a 128-entry correction, moves the electrical offset to match and uses
+        # both; save=True saves. then_cogging=True also identifies the anti-cogging afterwards and saves everything.
+        # Read PARAM_ENCAL for the state (ENCAL_STATES), or PARAM_COGCAL for a combined run. Firmware batch 9.
+        self.Send_Parameter(self.PARAM_ENCAL, 3 if then_cogging else (2 if save else 1))
+
+    def Send_Respond_Telemetry(self):
+        # One remote frame instead of four requests: fills temperature, voltage, the error flags (as
+        # Send_Respond_State_of_Errors does) and current, all from the same moment. Firmware 2026-11 and later.
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_RESPOND_TELEMETRY_ID, 0)
+        self.communication.send_can_message(message_id=_canid, remote_frame=True)
+
+    def Send_Respond_Identity(self):
+        # The reply fills product_id/product_name, tool_id, firmware_version, identity_hardware_version,
+        # pole_pairs, identity_calibrated and identity_flags.
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_RESPOND_IDENTITY_ID, 0)
+        self.communication.send_can_message(message_id=_canid, remote_frame=True)
 
     def Send_Respond_Ping(self):
         _canid = util.combine_2_can_id(self.node_id,self.SEND_RESPOND_PING_ID,0)
