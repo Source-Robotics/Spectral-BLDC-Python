@@ -53,6 +53,45 @@ while True:
 Every command and its fields: the [CAN reference](https://docs.source-robotics.com/Spectral-BLDC-docs/latest/06-operation/can/)
 in the Spectral Micro manual, and the same for [STEPFOC](https://docs.source-robotics.com/STEPFOC-docs/latest/06-operation/can/).
 
+## Helpers
+
+`Spectral_BLDC.helpers` sends a request and waits for the drive's answer, so reading a value takes one line
+instead of a receive loop:
+
+```python
+import Spectral_BLDC as Spectral
+from Spectral_BLDC import helpers
+
+Communication1 = Spectral.CanCommunication(bustype='slcan', channel='COM41', bitrate=1000000)
+Motor1 = Spectral.SpectralCAN(node_id=0, communication=Communication1)
+
+print(helpers.read_identity(Motor1))                      # product, firmware, tool id, pole pairs, ...
+print(helpers.get_parameter(Motor1, Motor1.PARAM_KPV))    # the velocity gain in force
+print(helpers.set_parameter(Motor1, Motor1.PARAM_SOUND_LIMIT_MV, 2500))   # True: the drive took it
+print(helpers.read_position(Motor1))                      # encoder ticks, 16384 per turn
+```
+
+A helper returns `None` when the drive does not answer within its timeout, or does not know a parameter. The
+helpers read the bus themselves: use them to set up, diagnose, calibrate and play sound, not inside a fast control
+loop or while another thread receives from the same bus. They are tested offline against a simulated drive:
+`python -m unittest discover -s tests`.
+
+<details>
+<summary>Every helper</summary>
+
+| Helper | What it does |
+|---|---|
+| `get_parameter`, `get_parameters`, `set_parameter` | read one parameter or many; write one and read it back (`True` taken, `False` clamped or refused) |
+| `read_identity`, `read_telemetry`, `errors`, `read_position`, `features`, `loop_rate` | what the drive is; temperature, voltage, current and the flags in one snapshot; the error flags; the encoder position; parameter 79 in words; the control loop rate |
+| `hold` | holds the shaft in position mode where it is, sending the command again so a watchdog stays fed |
+| `wait_for_state` | follows a run on the drive (encoder table, anti-cogging, capture) until it ends |
+| `read_buffer` | reads the capture, histogram, anti-cogging and encoder-table buffers, asking again for lost frames |
+| `capture`, `start_capture`, `wait_capture`, `read_capture`, `unwrap16` | records three signals on the drive and reads them back |
+| `play_events`, `stream_samples` | plays queued notes on one drive or several, topping the queue up; streams samples such as speech. With `hold=True` (the default) the drive holds its position while it plays |
+| `wait_reply`, `drain`, `flush` | the receive steps the others are built on |
+
+</details>
+
 ## Works with
 
 | Product | Firmware | Library | Repository |
@@ -66,6 +105,30 @@ Older firmware: the compatibility pages of the
 [Spectral Micro](https://docs.source-robotics.com/Spectral-BLDC-docs/latest/appendix/compatibility/) and
 [STEPFOC](https://docs.source-robotics.com/STEPFOC-docs/latest/appendix/compatibility/) manuals.
 
+## Firmware 109
+
+Firmware 109 is the release from which the STEPFOC and the Spectral Micro share their version numbers. The library
+speaks everything it adds, from the release after 1.20:
+
+- **Parameters.** One numbered list of settings and read-outs behind a single set and get command: the gains and
+  limits in force, the watchdog fallback, the tool id, the motor's resistance, inductance and pole pairs, and more.
+- **Identity and telemetry.** One frame says what the drive is: product, firmware, hardware, tool, pole pairs,
+  calibrated or not. Another gives the temperature, the bus voltage, the current and every error flag from the same
+  moment.
+- **Watchdog actions.** When the host goes silent, the drive can hold its position, brake, coast or let a load down
+  slowly, instead of only stopping. Hold and let-down run for a set time, then the drive brakes or coasts.
+- **Capture.** A three-channel recorder inside the drive, 1024 samples per channel, started at once, on an error or
+  when a signal crosses a level: step responses and faults, seen from the control loop.
+- **Calibration on the drive.** The drive measures its encoder's error and its motor's cogging by itself, a turn each
+  way, corrects both and saves them. Parameter 79 says what is in force and what is running.
+- **Sound.** The motor plays tones, chords of up to four notes, melodies from a queue, and streamed samples such as
+  speech, while it holds or moves.
+
+Most of these need firmware 109 on the drive: older firmware does not answer the new requests, and the helpers
+return `None`. Every command and parameter is on the manuals' CAN pages:
+[STEPFOC](https://docs.source-robotics.com/STEPFOC-docs/latest/06-operation/can/) and
+[Spectral Micro](https://docs.source-robotics.com/Spectral-BLDC-docs/latest/06-operation/can/).
+
 ## Examples
 
 In [examples](https://github.com/Source-Robotics/Spectral-BLDC-Python/tree/main/examples):
@@ -75,6 +138,11 @@ In [examples](https://github.com/Source-Robotics/Spectral-BLDC-Python/tree/main/
 | `Send_respond_1.py` | goes through the commands: settings, gains, limits, the gripper commands, and reads the answers |
 | `Get_encoder_data.py` | reads the encoder position and speed |
 | `SSG48_gripper_test.py` | clears the errors, calibrates and moves the SSG-48 gripper |
+| `parameters_and_status.py` | identity, telemetry, what is in force (parameter 79) and every parameter; reads only (firmware 109) |
+| `capture.py` | a step response recorded on the drive, saved as CSV; **moves the motor** 1000 ticks (`--step 0` does not move it) (firmware 109) |
+| `calibration_features.py` | the encoder table and anti-cogging: what is in force and the results; with `--run` **the motor turns** for about a minute and the drive saves the results (firmware 109) |
+| `watchdog.py` | the watchdog actions and fallback, set, read back and put back; with `--trip` **the drive holds, then acts** when the script goes silent (firmware 109) |
+| `sound.py` | a tone, a chord, a ringtone and a WAV file through the motor; **the motor is energised and holds its position** while it plays (firmware 109) |
 | `Advanced/Bilateral teleop 2DOF` | bilateral teleoperation with two motors, also over UDP with a Raspberry Pi |
 | `Advanced/Gravity compensation` | a single link that holds itself against gravity, with its BOM, STL files and setup guide |
 | `Advanced/SSG48 gripper bilateral teleop` | bilateral teleoperation with the SSG-48 gripper |
