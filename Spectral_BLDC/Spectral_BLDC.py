@@ -182,7 +182,17 @@ class SpectralCAN:
                 9: 'delay compensation', 10: 'speed PLL', 11: 'fast reading', 12: 'fast PWM',
                 13: 'fast sin/cos', 14: 'input filter', 15: 'integral deadband',
                 20: 'calibration running', 21: 'encoder table running', 22: 'anti-cogging running',
-                23: 'runs after the calibration pending'}  # bits 16-17: parameter 56
+                23: 'runs after the calibration pending', 24: 'sound playing'}  # bits 16-17: parameter 56
+    # Sound through the motor (firmware batch 22; Spectral_BLDC.music makes the events and samples). It plays while
+    # the drive holds or moves (position, velocity, current or PD mode); idle or an error stops it.
+    SEND_SOUND_ID = 44               # [op][channel][a u16][b u16][c u16]: see the Send_Sound_* functions
+    SEND_SOUND_SAMPLES_ID = 45       # 1-8 samples (int8) per frame into the drive's 1024-sample buffer
+    PARAM_SOUND_STATE = 80           # read-only: bits 0-7 queued events, 8-18 buffered samples, 24 tones,
+                                     # 25 queue playing, 26 samples playing, 27 the samples ran dry
+    PARAM_SOUND_LIMIT_MV = 81        # the sound's voltage at most, mV (default 2000; 0 refuses sound)
+    PARAM_SOUND_AXIS = 82            # 0: the d axis (no torque, default), 1: the q axis (a torque ripple)
+    SOUND_QUEUE_FREE = 31            # events the drive's queue holds
+    SOUND_BUFFER = 1023              # samples the drive's buffer holds
     # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
     # correction of the encoder, saved in its own EEPROM block. PARAM_COGCAL or PARAM_ENCAL = 3 runs it, then the
     # anti-cogging, and saves both.
@@ -225,7 +235,8 @@ class SpectralCAN:
                        64: 'commutation delay us', 65: 'fast sin/cos', 71: 'fast reading', 72: 'fast PWM',
                        74: 'position input filter Hz',
                        75: 'velocity integral deadband ticks', 76: 'R milliohm', 77: 'L microhenry',
-                       78: 'pole pairs', 79: 'features (bits)'}
+                       78: 'pole pairs', 79: 'features (bits)', 80: 'sound state (bits)',
+                       81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)'}
     SEND_RESPOND_TELEMETRY_ID = 40   # remote frame: temperature, Vbus, both error bytes, Iq in one snapshot
     # Buffers (firmware 2026-11 batch 3): the capture, the histogram and the anti-cogging data
     SEND_BUFFER_READ_ID = 41         # [kind][first u16][count u16]; the drive answers with one frame per entry on 42
@@ -1013,6 +1024,52 @@ class SpectralCAN:
             starts.append(len(values) - 3)
         for i in starts:
             self._send_buffer_frame(self.BUFFER_COGGING_TABLE, first + i, values[i:i + 3])
+
+    def Send_Sound(self, op, channel=0, a=0, b=0, c=0):
+        # The raw sound command (SEND_SOUND_ID): op 0 stop, 1 tone, 2 queue event, 3 play queue, 4 play samples,
+        # 5 samples off, 6 clear queue; a, b, c are u16.
+        for v in (a, b, c):
+            if not 0 <= int(v) <= 65535:
+                raise ValueError('Send_Sound: a, b and c are 0-65535')
+        if not 0 <= channel <= 3:
+            raise ValueError('Send_Sound: channel 0-3')
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_SOUND_ID, 0)
+        data = bytearray([op, channel]) + int(a).to_bytes(2, 'big') + int(b).to_bytes(2, 'big') + int(c).to_bytes(2, 'big')
+        self.communication.send_can_message(message_id=_canid, data=data)
+
+    def Send_Tone(self, freq_hz, current_mA=200, duration_ms=0, channel=0):
+        # A tone now on channel 0-3 (up to 4 at once), loudness as a current (mA); duration 0 = until Send_Sound_Stop.
+        self.Send_Sound(1, channel, int(round(freq_hz)), int(current_mA), int(duration_ms))
+
+    def Send_Sound_Stop(self):
+        # Everything off: tones, the queue, the samples.
+        self.Send_Sound(0)
+
+    def Send_Sound_Event(self, freq_hz, current_mA, wait_ms, channel=0):
+        # Queue an event: set channel's pitch (0 = silence) and loudness, then wait (0: the next starts with it).
+        self.Send_Sound(2, channel, int(round(freq_hz)), int(current_mA), int(wait_ms))
+
+    def Send_Sound_Play(self):
+        # Play the queued events (with loop-exact timing).
+        self.Send_Sound(3)
+
+    def Send_Sound_Clear(self):
+        # Clear the queue; tones that sound keep sounding.
+        self.Send_Sound(6)
+
+    def Send_Samples(self, samples):
+        # Samples (bytes or ints -128..127) into the drive's buffer, 8 per frame. Send some, then Send_Samples_Play.
+        data = bytes(int(s) & 0xFF for s in samples) if not isinstance(samples, (bytes, bytearray)) else bytes(samples)
+        _canid = util.combine_2_can_id(self.node_id, self.SEND_SOUND_SAMPLES_ID, 0)
+        for i in range(0, len(data), 8):
+            self.communication.send_can_message(message_id=_canid, data=bytearray(data[i:i + 8]))
+
+    def Send_Samples_Play(self, rate_hz, full_scale_mV=1000):
+        # Play the buffered samples at rate_hz (up to the loop rate), +-127 = full_scale_mV.
+        self.Send_Sound(4, 0, int(rate_hz), int(full_scale_mV), 0)
+
+    def Send_Samples_Stop(self):
+        self.Send_Sound(5)
 
     @classmethod
     def decode_features(cls, value):
