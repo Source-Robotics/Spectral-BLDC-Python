@@ -190,7 +190,7 @@ class SpectralCAN:
     PARAM_SOUND_STATE = 80           # read-only: bits 0-7 queued events, 8-18 buffered samples, 24 tones,
                                      # 25 queue playing, 26 samples playing, 27 the samples ran dry
     PARAM_SOUND_LIMIT_MV = 81        # the sound's voltage at most, mV (default 2000; 0 refuses sound)
-    PARAM_SOUND_AXIS = 82            # 0: the d axis (no torque, default), 1: the q axis (a torque ripple)
+    PARAM_SOUND_AXIS = 82            # 1: the q axis (a small torque ripple; default, much louder), 0: the d axis
     SOUND_QUEUE_FREE = 31            # events the drive's queue holds
     SOUND_BUFFER = 1023              # samples the drive's buffer holds
     # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
