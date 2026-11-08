@@ -24,7 +24,7 @@ from Spectral_BLDC import helpers  # noqa: E402
 from Spectral_BLDC.Spectral_BLDC import CanMessage  # noqa: E402
 
 S = Spectral.SpectralCAN
-READ_ONLY = set(range(8, 21)) | {23, 31, 32, 33, 36, 39, 40, 41, 42, 45, 47, 48, 54, 55, 57, 61, 62, 63, 79, 80, 83}
+READ_ONLY = {23, 31, 32, 33, 36, 39, 40, 41, 42, 45, 47, 48, 54, 55, 57, 61, 62, 63, 79, 80, 83}
 
 
 class FakeDrive:
@@ -100,6 +100,8 @@ class FakeDrive:
         return self.params.get(number)
 
     def set(self, number, value):
+        if number in S.FLOAT_PARAMETERS:                  # the gains and limits travel as a float's bits
+            value = struct.unpack('>f', int(value).to_bytes(4, 'big', signed=True))[0]
         self.sent_params.append((number, value))
         if number in READ_ONLY or number not in self.params:
             return
@@ -268,8 +270,9 @@ class Parameters(unittest.TestCase):
         self.assertEqual(drive.params[1], 1)
         self.assertIsNone(helpers.set_parameter(motor, S.PARAM_ENCAL, 1))             # an action: not read back
         self.assertEqual(drive.sent_params[-1], (52, 1))
-        with self.assertRaises(ValueError):
-            helpers.set_parameter(motor, S.PARAM_KPV, 0.02)                            # a float gain
+        self.assertTrue(helpers.set_parameter(motor, S.PARAM_KPV, 0.0375))            # a float gain (firmware 109)
+        self.assertAlmostEqual(drive.params[9], 0.0375, places=6)
+        self.assertAlmostEqual(motor.parameters[9], 0.0375, places=6)
         with self.assertRaises(ValueError):
             helpers.set_parameter(motor, S.PARAM_TOOL_ID, 1.5)
         drive.silent = True

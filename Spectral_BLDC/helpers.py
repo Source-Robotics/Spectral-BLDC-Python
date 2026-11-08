@@ -26,6 +26,7 @@ Good to know:
 - Values travel in the drive's units: encoder ticks (16384 per motor turn), ticks/s, mA, mV, ms.
 """
 
+import struct
 import time
 from typing import NamedTuple, Optional
 
@@ -165,14 +166,21 @@ def set_parameter(motor, number, value, check=True, timeout=0.3, others=()):
 
     The parameters that start something (ACTION_PARAMETERS: the capture trigger 28, the anti-cogging run 43, the
     encoder table 52) read back a state, not the value written: they are written and not checked; follow them with
-    wait_for_state() or wait_capture(). The float parameters (the gains and limits) are read-only here: set them
-    with their own commands (Send_Position_Gains, Send_Velocity_Gains, Send_Limits, ...).
+    wait_for_state() or wait_capture(). The float parameters (the gains and limits, motor.FLOAT_PARAMETERS) travel
+    as their bit pattern; firmware 109 builds from 572a4ad (STEPFOC) / acaed1a (Spectral) accept them, older ones
+    refuse them (False): set them there with their own commands (Send_Position_Gains, Send_Limits, ...).
 
     A written value is in RAM until motor.Send_Save_config().
     """
     if number in motor.FLOAT_PARAMETERS:
-        raise ValueError(f"parameter {number} ({motor.PARAMETER_NAMES.get(number, '?')}) is read-only over the "
-                         f"parameter commands; set it with its own command")
+        want = struct.unpack('>f', struct.pack('>f', float(value)))[0]       # as the drive will hold it
+        motor.Send_Parameter(number, struct.unpack('>i', struct.pack('>f', want))[0])
+        if not check:
+            return None
+        got = get_parameter(motor, number, timeout=timeout, others=others)
+        if got is None:
+            return None
+        return abs(got - want) <= 1e-6 * max(1.0, abs(want))
     if int(value) != value:
         raise ValueError(f"parameter {number} takes an integer, not {value!r}")
     motor.Send_Parameter(number, int(value))

@@ -95,7 +95,7 @@ class SpectralCAN:
     PARAM_WD_AFTER_ACTION = 5        # after hold/descend: 0 legacy, 2 brake, 3 coast
     PARAM_WD_TIME = 6                # watchdog time ms, 0 = off
     PARAM_WD_ACTION = 7              # watchdog action 0-4
-    # Read-only (firmware 109): the values in force
+    # The gains and limits in force (firmware 109): readable, and writable here too since 572a4ad / acaed1a
     PARAM_KPP = 8
     PARAM_KPV = 9
     PARAM_KIV = 10
