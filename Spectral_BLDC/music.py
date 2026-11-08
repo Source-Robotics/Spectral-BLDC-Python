@@ -209,8 +209,13 @@ def lines_events(lines, current_mA=200, gap_ms=10):
     return events
 
 
-def wav_samples(path, rate):
-    """A WAV file (8 or 16 bit, any channels) as int8 samples at `rate` Hz, mono, scaled to the full range."""
+def wav_samples(path, rate, coil_tau_s=0.0, compress=1.0):
+    """A WAV file (8 or 16 bit, any channels) as int8 samples at `rate` Hz, mono, scaled to the full range.
+
+    coil_tau_s: the coil's L / R (s). Above 1 / (2 pi tau) the coil passes less current the higher the pitch, which
+    takes the consonants out of speech; this boosts the highs to match (y = x + tau dx/dt), so the current, and the
+    sound, follow the recording. compress: below 1 raises quiet parts (|y| ** compress), so speech is louder overall.
+    """
     import wave
     with wave.open(path, 'rb') as w:
         nch, width, fr, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
@@ -228,5 +233,11 @@ def wav_samples(path, rate):
         f = pos - k
         out.append(mono[k] * (1 - f) + mono[k + 1] * f)
         pos += step
+    if coil_tau_s > 0 and out:
+        k = coil_tau_s * rate
+        out = [out[0]] + [out[i] + k * (out[i] - out[i - 1]) for i in range(1, len(out))]
     peak = max((abs(v) for v in out), default=1) or 1
-    return bytes(int(round(v / peak * 127)) & 0xFF for v in out)
+    out = [v / peak for v in out]
+    if compress != 1.0:
+        out = [(1 if v >= 0 else -1) * abs(v) ** compress for v in out]
+    return bytes(int(round(v * 127)) & 0xFF for v in out)
