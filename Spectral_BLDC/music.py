@@ -209,12 +209,14 @@ def lines_events(lines, current_mA=200, gap_ms=10):
     return events
 
 
-def wav_samples(path, rate, coil_tau_s=0.0, compress=1.0):
+def wav_samples(path, rate, coil_tau_s=0.0, clip_percentile=None):
     """A WAV file (8 or 16 bit, any channels) as int8 samples at `rate` Hz, mono, scaled to the full range.
 
     coil_tau_s: the coil's L / R (s). Above 1 / (2 pi tau) the coil passes less current the higher the pitch, which
     takes the consonants out of speech; this boosts the highs to match (y = x + tau dx/dt), so the current, and the
-    sound, follow the recording. compress: below 1 raises quiet parts (|y| ** compress), so speech is louder overall.
+    sound, follow the recording. clip_percentile (e.g. 0.95): scale so that this share of the samples fits and
+    soft-clip the rest; speech averages about a tenth of its peak, and this makes it about four times louder while
+    staying intelligible. None: scale to the peak (music).
     """
     import wave
     with wave.open(path, 'rb') as w:
@@ -236,8 +238,14 @@ def wav_samples(path, rate, coil_tau_s=0.0, compress=1.0):
     if coil_tau_s > 0 and out:
         k = coil_tau_s * rate
         out = [out[0]] + [out[i] + k * (out[i] - out[i - 1]) for i in range(1, len(out))]
-    peak = max((abs(v) for v in out), default=1) or 1
-    out = [v / peak for v in out]
-    if compress != 1.0:
-        out = [(1 if v >= 0 else -1) * abs(v) ** compress for v in out]
+    if clip_percentile:
+        import math
+        mags = sorted(abs(v) for v in out)
+        ref = mags[int(clip_percentile * (len(mags) - 1))] if mags else 1
+        ref = ref or 1
+        out = [math.tanh(1.5 * v / ref) / math.tanh(1.5) for v in out]
+        out = [max(-1.0, min(1.0, v)) for v in out]
+    else:
+        peak = max((abs(v) for v in out), default=1) or 1
+        out = [v / peak for v in out]
     return bytes(int(round(v * 127)) & 0xFF for v in out)
