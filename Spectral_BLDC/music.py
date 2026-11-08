@@ -153,7 +153,7 @@ def read_midi(path):
                 j += 1                               # program change, channel pressure
         tracks.append(events)
         i = end
-    tempos.sort()
+    tempos.sort(key=lambda x: x[0])  # by tick only: at the same tick the file's tempo follows (and beats) the default
 
     def seconds(tick):
         s, last_tick, us = 0.0, 0, 500000
