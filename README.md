@@ -96,8 +96,8 @@ loop or while another thread receives from the same bus. They are tested offline
 
 | Product | Firmware | Library | Repository |
 |---|---|---|---|
-| Spectral Micro BLDC controller | 107 | 1.20 or newer | [Spectral-Micro-BLDC-controller](https://github.com/Source-Robotics/Spectral-Micro-BLDC-controller) |
-| STEPFOC stepper controller | 108 | 1.20 or newer | [STEPFOC-stepper-controller](https://github.com/Source-Robotics/STEPFOC-stepper-controller) |
+| Spectral Micro BLDC controller | 109 | 1.21 or newer | [Spectral-Micro-BLDC-controller](https://github.com/Source-Robotics/Spectral-Micro-BLDC-controller) |
+| STEPFOC stepper controller | 109 | 1.21 or newer | [STEPFOC-stepper-controller](https://github.com/Source-Robotics/STEPFOC-stepper-controller) |
 | SSG-48 adaptive electric gripper | Spectral Micro firmware | as for Spectral Micro | [SSG-48-adaptive-electric-gripper](https://github.com/Source-Robotics/SSG-48-adaptive-electric-gripper) |
 | MSG compliant AI stepper gripper | STEPFOC firmware | as for STEPFOC | [MSG-compliant-AI-stepper-gripper](https://github.com/Source-Robotics/MSG-compliant-AI-stepper-gripper) |
 
@@ -108,7 +108,7 @@ Older firmware: the compatibility pages of the
 ## Firmware 109
 
 Firmware 109 is the release from which the STEPFOC and the Spectral Micro share their version numbers. The library
-speaks everything it adds, from the release after 1.20:
+speaks everything it adds, from 1.21:
 
 - **Parameters.** One numbered list of settings and read-outs behind a single set and get command: the gains and
   limits in force, the watchdog fallback, the tool id, the motor's resistance, inductance and pole pairs, and more.

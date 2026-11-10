@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '1.20'
+VERSION = '1.21'
 DESCRIPTION = 'Python module for Spectral BLDC motor controllers'
 
 # Setting up
@@ -26,6 +26,7 @@ setup(
     long_description=long_description,
     packages=find_packages(),
     install_requires=['python-can','pyserial'],
+    python_requires='>=3.10',  # the library uses match statements
     keywords=['python', 'BLDC', 'CANBUS', 'Robot', 'Source robotics', 'robotics'],
     classifiers=[
         "Development Status :: 1 - Planning",

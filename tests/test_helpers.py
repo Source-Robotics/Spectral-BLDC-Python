@@ -24,7 +24,8 @@ from Spectral_BLDC import helpers  # noqa: E402
 from Spectral_BLDC.Spectral_BLDC import CanMessage  # noqa: E402
 
 S = Spectral.SpectralCAN
-READ_ONLY = {23, 31, 32, 33, 36, 39, 40, 41, 42, 45, 47, 48, 54, 55, 57, 61, 62, 63, 79, 80, 83}
+READ_ONLY = {23, 31, 32, 33, 36, 39, 40, 41, 42, 45, 47, 48, 54, 55, 57, 61, 62, 63, 66, 67, 68, 69, 70, 79, 80, 83,
+             84, 85, 86, 87, 89}
 
 
 class FakeDrive:
@@ -305,7 +306,6 @@ class State(unittest.TestCase):
         f = helpers.features(motor)
         self.assertTrue(f['calibrated'] and f['encoder table in use'] and f['anti-cogging on'])
         self.assertFalse(f['sound playing'])
-        self.assertEqual(f['after calibration'], 'encoder table and anti-cogging')
         drive.silent = True
         self.assertIsNone(helpers.read_identity(motor, timeout=0.02))
         self.assertIsNone(helpers.features(motor, timeout=0.02))

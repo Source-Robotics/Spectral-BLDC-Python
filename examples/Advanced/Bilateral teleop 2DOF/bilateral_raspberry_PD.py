@@ -130,9 +130,9 @@ while True:
     #Motor[1].Send_Respond_Encoder_data()
     #Motor[1].Send_Respond_Encoder_data()
     #Motor[2].Send_Respond_Encoder_data()
-    Motor[1].Send_data_pack_1(Position = None,Speed = None, Current = int(Torques[0]))
-    Motor[0].Send_data_pack_1(Position = None,Speed = None, Current = int(Torques[1]))
-    Motor[2].Send_data_pack_1(Position = None,Speed = None, Current = int(Torques[2]))
+    Motor[1].Send_data_pack_1(Position = None,Speed = None, Current = max(-2800, min(2800, int(Torques[0]))))   # the drive's limit; the library refuses beyond 16 bits
+    Motor[0].Send_data_pack_1(Position = None,Speed = None, Current = max(-2800, min(2800, int(Torques[1]))))
+    Motor[2].Send_data_pack_1(Position = None,Speed = None, Current = max(-2800, min(2800, int(Torques[2]))))
 
     for i in range(1, 4):  # Loop 9-1=8 to check for received data
         # Check the CAN buffer, if there is something get message and CAN ID

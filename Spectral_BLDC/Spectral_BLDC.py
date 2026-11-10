@@ -1,6 +1,8 @@
 import can
 from .import CAN_utils as util
 import logging
+import math
+import numbers
 from collections import namedtuple
 import struct
 
@@ -21,17 +23,25 @@ class CanCommunication:
         self.bustype=bustype
         self.channel=channel
         self.bitrate=bitrate
+        self.last_send_error = None     # the exception of the last failed send, None after a send that worked
         if self.channel != None:
-            self.bus = can.interface.Bus(bustype = self.bustype, channel = self.channel, bitrate = self.bitrate)
+            # 'interface' is python-can's name for it ('bustype' is deprecated since 4.2 and goes in 5.0)
+            self.bus = can.interface.Bus(interface = self.bustype, channel = self.channel, bitrate = self.bitrate)
 
     def send_can_message(self, message_id, data=b'', remote_frame=False):
         message = can.Message(arbitration_id=message_id, data=data, is_remote_frame=remote_frame, is_extended_id=False)
+        # Returns True when the frame went to the adapter. A failure is not raised (a control loop should survive a
+        # full transmit buffer) but it is no longer silent: False comes back, the exception is kept in
+        # last_send_error, and it is logged once until a send works again.
         try:
             self.bus.send(message)
-        except can.CanOperationError as e:
-            None#return False
         except Exception as e:
-            None#return False
+            if self.last_send_error is None:
+                logging.warning(f"CAN send failed: {e!r}")
+            self.last_send_error = e
+            return False
+        self.last_send_error = None
+        return True
 
     def receive_can_messages(self,timeout = None):
         self.timeout = timeout
@@ -99,7 +109,7 @@ class SpectralCAN:
     PARAM_KPP = 8
     PARAM_KPV = 9
     PARAM_KIV = 10
-    PARAM_KPIQ = 11
+    PARAM_KPIQ = 11                  # 11 and 12 set the Iq and the Id loop; Send_Current_Gains (CAN 17) sets Iq only
     PARAM_KIIQ = 12
     PARAM_KP = 13
     PARAM_KD = 14
@@ -112,7 +122,7 @@ class SpectralCAN:
     PARAM_SENSE1_OFFSET = 21         # current-sense zero 1, counts from 2048 (1 count = 1.6 mA); writable (RAM) since batch 10
     PARAM_SENSE2_OFFSET = 22
     PARAM_ID_SETPOINT = 58           # the d-axis current setpoint, mA (RAM, as #Id): no torque, more phase current
-    PARAM_BOARD_PRODUCT = 23
+    PARAM_BOARD_PRODUCT = 23         # read-only: the product the board was stamped for
     # Capture, histogram, anti-cogging (firmware 2026-11 batch 3). Capture/histogram: RAM only.
     PARAM_CAPTURE_SOURCE_A = 24      # signal of channel A (SIGNALS), also the trigger channel
     PARAM_CAPTURE_SOURCE_B = 25
@@ -142,10 +152,10 @@ class SpectralCAN:
                                      # Ki_iq at once from the measured R and L; reading gives the bandwidth the
                                      # gains in force amount to (default 160 since firmware 2026-11 batch 7)
     PARAM_SPEED_ESTIMATOR = 50       # the speed the loops use: SPEED_ESTIMATORS (firmware 2026-11 batch 8, RAM);
-                                     # default STEPFOC 2 (PLL direct), Spectral Micro 0 (moving average)
+                                     # default 2 (PLL direct) on both; the Spectral Micro used 0 before 2026-11-10
     SPEED_ESTIMATORS = {0: 'moving average', 1: 'PLL', 2: 'PLL direct'}
     PARAM_SPEED_PLL_BANDWIDTH = 51   # the speed PLLs' natural frequency, Hz (10 to loop rate / 20; 160 = 1000 rad/s);
-                                     # default STEPFOC 60, Spectral Micro 160
+                                     # default STEPFOC 60, Spectral Micro 100
     PARAM_COGCAL = 43                # write 1: identify the anti-cogging on the drive, 2: and save, 0: abort
     PARAM_COGCAL_SPEED = 44          # ticks/s the identification turns at (1500)
     PARAM_COGCAL_RIPPLE = 45         # read-only, the identified cogging current, rms, 0.1 mA
@@ -162,7 +172,7 @@ class SpectralCAN:
     PARAM_THETA_OFFSET = 61          # read-only, the electrical offset, 0.1 deg electrical
     PARAM_TRIM_H1_BEFORE = 62        # read-only, the 1st harmonic before the last trim, 0.1 mA
     PARAM_TRIM_H1_AFTER = 63         # read-only, and after it
-    PARAM_COMM_DELAY_US = 64         # commutation delay compensation, us (0 = off, RAM; STEPFOC default 166 since batch 17)
+    PARAM_COMM_DELAY_US = 64         # commutation delay compensation, us (0 = off, RAM; default STEPFOC 166, Spectral Micro 234)
     PARAM_FAST_TRIG = 65             # 1: the transforms' sin/cos from the integer table, 0: qfplib (default)
     PARAM_PROFILE = {66: 'checks', 67: 'reading', 68: 'transforms', 69: 'control and PWM', 70: 'rest'}  # R, 0.1 us; STEPFOC
     PARAM_FAST_READ = 71             # 1: the ADC reads and the encoder SPI by register (STEPFOC; default 1 since batch 16)
@@ -176,12 +186,12 @@ class SpectralCAN:
     # calibration (or a write of PARAM_CURRENT_BANDWIDTH).
     PARAM_R_MOHM = 76                # phase resistance, milliohm
     PARAM_L_UH = 77                  # phase inductance, microhenry
-    PARAM_POLE_PAIRS = 78            # pole pairs, only while idle; calibrate after a change
+    PARAM_POLE_PAIRS = 78            # pole pairs (STEPFOC 1-200, Spectral Micro 1-49), only while idle; calibrate after a change
     PARAM_FEATURES = 79              # read-only bits: what is in force and what runs (FEATURES; batch 20)
     FEATURES = {0: 'calibrated', 1: 'encoder table measured', 2: 'encoder table in use',
                 3: 'anti-cogging identified', 4: 'anti-cogging on', 5: 'anti-cogging as the table',
                 6: 'anti-cogging saved', 7: 'current-sense zero trim', 8: 'switching zero in use',
-                9: 'delay compensation', 10: 'speed PLL', 11: 'fast reading', 12: 'fast PWM',
+                9: 'delay compensation', 10: 'speed PLL', 11: 'fast reading (STEPFOC)', 12: 'fast PWM (STEPFOC)',
                 13: 'fast sin/cos', 14: 'input filter', 15: 'integral deadband',
                 20: 'calibration running', 21: 'encoder table running', 22: 'anti-cogging running',
                 23: 'runs after the calibration pending', 24: 'sound playing'}  # bits 16-17: parameter 56
@@ -194,6 +204,14 @@ class SpectralCAN:
     PARAM_SOUND_LIMIT_MV = 81        # the sound's voltage at most, mV (default 2000; 0 refuses sound)
     PARAM_SOUND_AXIS = 82            # 1: the q axis (a small torque ripple; default, much louder), 0: the d axis
     PARAM_STACK_UNUSED = 83          # read-only: RAM the stack never reached since start, bytes (firmware 109)
+    PARAM_BUILD_COMMIT = 84          # read-only: the git commit built from, 7 hex digits; bit 28 = uncommitted changes
+    PARAM_BUILD_TIME = 85            # read-only: when it was built, Unix seconds UTC
+    PARAM_BOARD_ID = 86              # read-only: this board, from the chip's unique number; never changes
+    PARAM_CALIBRATION_ID = 87        # read-only: a new random number at every successful calibration; 0 none yet
+    PARAM_SENSE_SAMPLE_AT = 88       # Spectral Micro only: the PWM count (TIM2) the current sensors are read at;
+                                     # -1 = wherever the code gets there (default, RAM). A bench diagnostic
+    PARAM_SENSE_SAMPLE_SEEN = 89     # Spectral Micro only, read-only: the PWM count of the last reading, +65536 while
+                                     # counting down
     SOUND_QUEUE_FREE = 31            # events the drive's queue holds
     SOUND_BUFFER = 1023              # samples the drive's buffer holds
     # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
@@ -203,8 +221,8 @@ class SpectralCAN:
     PARAM_ENCAL_USE = 53             # 1: correct the encoder with the table (only if one was measured)
     PARAM_ENCAL_PP = 54              # read-only, the table's error peak to peak, 0.01 deg of the shaft
     PARAM_ENCAL_ONCE = 55            # read-only, its once-per-turn part, 0.01 deg of the shaft
-    PARAM_AFTER_CAL = 56             # what runs after a successful calibration: AFTER_CAL (saved with the table);
-                                     # STEPFOC default 'both' since batch 20 (then saves everything), Spectral 'nothing'
+    PARAM_AFTER_CAL = 56             # STEPFOC: what follows #Calangle (0 nothing, else anti-cogging); no effect on Spectral.
+                                     # #Cal always runs the encoder table and anti-cogging, #Calonly never. Saved with the table
     PARAM_ENCAL_OFFSET = 57          # read-only, how far the last run moved the electrical offset, 0.1 deg electrical
     ENCAL_STATES = {0: 'idle', 1: 'turning forward', 2: 'turning backward', 3: 'done', 4: 'aborted',
                     5: 'failed: error or not calibrated', 6: 'failed: the rotor did not follow',
@@ -212,6 +230,9 @@ class SpectralCAN:
     AFTER_CAL = {0: 'nothing', 1: 'anti-cogging', 2: 'encoder table and anti-cogging'}
     # Parameters whose 4 value bytes are an IEEE-754 float (the bit pattern), not an int32
     FLOAT_PARAMETERS = {8, 9, 10, 11, 12, 13, 14, 15, 16, 20}
+    # Bit masks and 32-bit numbers (status, sound state, build commit and time, board and calibration ID): read
+    # unsigned, so an ID with its top bit set is not a negative number.
+    UNSIGNED_PARAMETERS = {79, 80, 84, 85, 86, 87}
     PARAMETER_NAMES = {1: 'tool id', 2: 'watchdog fallback time ms', 3: 'watchdog fallback current mA',
                        4: 'watchdog fallback speed ticks/s', 5: 'watchdog after-action', 6: 'watchdog time ms',
                        7: 'watchdog action', 8: 'position gain Kpp', 9: 'velocity gain Kpv', 10: 'velocity gain Kiv',
@@ -231,7 +252,7 @@ class SpectralCAN:
                        48: 'current-sense zero 2, switching (counts)', 49: 'current-loop bandwidth Hz',
                        50: 'speed estimate (0 average, 1 PLL, 2 direct PLL)', 51: 'speed PLL bandwidth Hz',
                        52: 'encoder table', 53: 'use the encoder table', 54: 'encoder error p-p, 0.01 deg',
-                       55: 'encoder error once per turn, 0.01 deg', 56: 'after calibration',
+                       55: 'encoder error once per turn, 0.01 deg', 56: 'after #Calangle (STEPFOC)',
                        57: 'encoder offset move, 0.1 deg electrical', 58: 'Id setpoint mA',
                        59: 'zero trim 1 (counts)', 60: 'zero trim 2 (counts)', 61: 'theta offset, 0.1 deg el',
                        62: '1st harmonic before the trim, 0.1 mA', 63: '1st harmonic after the trim, 0.1 mA',
@@ -239,7 +260,13 @@ class SpectralCAN:
                        74: 'position input filter Hz',
                        75: 'velocity integral deadband ticks', 76: 'R milliohm', 77: 'L microhenry',
                        78: 'pole pairs', 79: 'features (bits)', 80: 'sound state (bits)',
-                       81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)', 83: 'stack never used, bytes'}
+                       81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)', 83: 'stack never used, bytes',
+                       84: 'build: git commit (bit 28 = uncommitted changes)', 85: 'build: Unix time',
+                       86: 'board ID', 87: 'calibration ID',
+                       88: 'sense sample point, TIM2 (Spectral)', 89: 'sense sample seen, TIM2 (Spectral)'}
+    # The gripper reply's object-detection value (Gripper_mode in both firmwares)
+    GRIPPER_OBJECT_DETECTION = {0: 'moving, or no contact', 1: 'stopped against an object, negative current (closing)',
+                                2: 'stopped against an object, positive current (opening)', 3: 'at position'}
     SEND_RESPOND_TELEMETRY_ID = 40   # remote frame: temperature, Vbus, both error bytes, Iq in one snapshot
     # Buffers (firmware 2026-11 batch 3): the capture, the histogram and the anti-cogging data
     SEND_BUFFER_READ_ID = 41         # [kind][first u16][count u16]; the drive answers with one frame per entry on 42
@@ -276,6 +303,9 @@ class SpectralCAN:
 
 
     def __init__(self, node_id, communication):
+        # The CAN id has 4 bits for the node; a larger number used to be cut down silently (16 became node 0).
+        if not (isinstance(node_id, int) and 0 <= node_id <= 15):
+            raise ValueError(f"node_id {node_id!r}: a drive's CAN id is 0 to 15")
         self.node_id = node_id
         self.communication = communication
         
@@ -376,6 +406,8 @@ class SpectralCAN:
         self.velocity_error = None
         self.current_error = None
         self.estop_error = None
+        self.watchdog_error = None
+        self.wrong_product = None
         self.calibrated = None
         self.activated = None
         self.HALL_trigger = None
@@ -407,9 +439,18 @@ class SpectralCAN:
 
         #logging.debug(message.data)
         #logging.debug(UnpackedMessageID.node_id)
+        # Only data frames with a standard id are replies of a drive: a remote frame (another host asking), an error
+        # frame or an extended id used to be decoded as if it were one, and could raise.
+        if (getattr(message, 'is_remote_frame', False) or getattr(message, 'is_error_frame', False)
+                or getattr(message, 'is_extended_id', False)):
+            return
+        # Another drive's reply is not this drive's: it used to overwrite this object's position and errors.
+        if UnpackedMessageID.node_id != self.node_id:
+            return
         self.Set_2_none()
 
         self.timestamp = message.timestamp
+        self.error_bit = UnpackedMessageID.error_bit
         match UnpackedMessageID.command_id:
 
             case self.RESPOND_HEARTBEAT_ID:
@@ -529,7 +570,7 @@ class SpectralCAN:
                     if number in self.FLOAT_PARAMETERS:
                         value = struct.unpack('>f', bytes(message.data[1:5]))[0]
                     else:
-                        value = int.from_bytes(bytes(message.data[1:5]), 'big', signed=True)
+                        value = int.from_bytes(bytes(message.data[1:5]), 'big', signed=number not in self.UNSIGNED_PARAMETERS)
                     self.parameters[number] = value
                     if number == self.PARAM_TOOL_ID:
                         self.tool_id = value
@@ -665,7 +706,19 @@ class SpectralCAN:
                 #logging.debug(f"Ping is: {self.ping}")
     
 
+    @staticmethod
+    def _fits(name, value, bits):
+        # The frames carry position and speed in 3 bytes and current in 2, signed. A larger value used to wrap: a
+        # position of 10,000,000 ticks went out as -6,777,216 and the drive travelled 1024 turns the other way.
+        limit = 1 << (bits - 1)
+        if value is not None and not -limit <= value < limit:
+            raise ValueError(f"{name} {value} does not fit the frame's {bits} bits ({-limit} to {limit - 1})")
+
     def Send_data_pack_1(self,Position = None,Speed = None, Current = None):
+        # All three: position mode. Speed and Current: velocity mode. Current alone: current mode.
+        self._fits('Position', Position, 24)
+        self._fits('Speed', Speed, 24)
+        self._fits('Current', Current, 16)
         
         if(Position != None and Speed != None and Current != None):
             _canid = util.combine_2_can_id(self.node_id,self.SEND_DATA_PACK_1_ID,0)
@@ -689,8 +742,8 @@ class SpectralCAN:
             _combined = bytearray(combined)
             self.communication.send_can_message(message_id = _canid, data = _combined)
         else:
-            #None
-            logging.debug("Invalid command")
+            # nothing is sent (a position needs speed and current feedforward, 0 if unused)
+            logging.warning("Send_data_pack_1: give Position+Speed+Current, Speed+Current or Current; nothing sent")
 
 
         #logging.debug("Send data pack 1")
@@ -705,6 +758,10 @@ class SpectralCAN:
         None
 
     def Send_data_pack_PD(self,Position = 0,Speed = 0, Current = 0):
+        # Note the defaults: without arguments this commands PD mode at absolute tick 0.
+        self._fits('Position', Position, 24)
+        self._fits('Speed', Speed, 24)
+        self._fits('Current', Current, 16)
         _canid = util.combine_2_can_id(self.node_id,self.SEND_DATA_PACK_PD_ID,0)
         _position = util.split_2_3_bytes(Position)
         _speed = util.split_2_3_bytes(Speed)
@@ -716,6 +773,8 @@ class SpectralCAN:
         #logging.debug("Send data pack PD")
 
     def Send_data_pack_HALL(self,Speed = 0, trigger_value = 0):
+        # STEPFOC only: the Spectral firmware has no hall-index command and does not answer it.
+        self._fits('Speed', Speed, 24)
         _canid = util.combine_2_can_id(self.node_id,self.SEND_HALL_INDEX,0)
         _speed = util.split_2_3_bytes(Speed)
         # trigger_value sent as raw byte: 0=low level, 1=high level, 2=any edge
@@ -728,6 +787,7 @@ class SpectralCAN:
 
         if(position_ != None and  speed_!= None and current_ != None and activate_ != None and action_ != None and ESTOP_ != None and Release_dir_ != None):
             _canid = util.combine_2_can_id(self.node_id,self.SEND_GRIPPER_DATA_PACK_ID,0)
+            self._fits('current_', current_, 16)   # the drive takes the magnitude, up to 2800 mA
             _current_ = util.split_2_2_bytes(current_)
             bitfield_list = [activate_,action_,ESTOP_,Release_dir_,0,0,0,0] 
             fused = util.fuse_bitfield_2_bytearray(bitfield_list)
@@ -796,6 +856,9 @@ class SpectralCAN:
 
     # Radi
     def Send_Voltage_Limit(self,Voltage_limit):
+        # 0 (the supply) to 60000 mV; firmware 109 does not take a value outside that
+        if not (isinstance(Voltage_limit, numbers.Real) and 0 <= Voltage_limit <= 60000 and int(Voltage_limit) == Voltage_limit):
+            raise ValueError(f"Send_Voltage_Limit: {Voltage_limit!r} mV is not 0 to 60000")
         _canid = util.combine_2_can_id(self.node_id,self.SEND_VOLTAGE_LIMIT_ID,0)
         _v_limit = util.split_2_4_bytes(Voltage_limit)  # mV, 4-byte big-endian int (0 = use VBUS_mV)
         combined = _v_limit
@@ -814,6 +877,9 @@ class SpectralCAN:
 
     # Radi čudno
     def Send_CAN_ID(self,_CAN_ID):
+        # 0 to 15; the firmware refuses anything else without an answer.
+        if not (isinstance(_CAN_ID, int) and 0 <= _CAN_ID <= 15):
+            raise ValueError(f"Send_CAN_ID: {_CAN_ID!r} is not a CAN id (0 to 15)")
         _canid = util.combine_2_can_id(self.node_id,self.SEND_CAN_ID,0) # Node id, command id, error bit ( 0 )
         _data = _CAN_ID
         self.communication.send_can_message(message_id = _canid, data = [_data])
@@ -933,12 +999,24 @@ class SpectralCAN:
         #logging.debug("Request encoder data")
 
     def Send_Parameter(self, number, value):
-        # Set parameter `number` (PARAM_*) to `value` (int32). No answer: read it back with
-        # Send_Get_Parameter. Firmware clamps values outside a parameter's range. Saved with Send_Save_config.
-        if not (0 <= number <= 255 and -2**31 <= value < 2**31):
-            raise ValueError('Send_Parameter: number 0-255, value int32')
+        # Set parameter `number` (PARAM_*) to `value`. The gains and limits (FLOAT_PARAMETERS) take the value itself
+        # (0.02, 1500) and travel as a float; every other parameter takes a whole number (int32). Until 2026-11-10 a
+        # float parameter's value was sent as an integer, which the drive read as a float of about 0:
+        # Send_Parameter(PARAM_CURRENT_LIMIT, 1500) set a current limit of nothing.
+        # No answer: read it back with Send_Get_Parameter (helpers.set_parameter does both). Outside a parameter's
+        # range the firmware refuses most values, clamps a few (6, 27, 30, 38, 44) and turns some into off or none
+        # (7, 24-26, 28, 34, 35). Saved with Send_Save_config.
+        if not 0 <= number <= 255:
+            raise ValueError('Send_Parameter: number 0-255')
+        if number in self.FLOAT_PARAMETERS:
+            payload = struct.pack('>f', float(value))
+        else:
+            if not (isinstance(value, numbers.Real) and math.isfinite(value) and int(value) == value
+                    and -2**31 <= value < 2**31):
+                raise ValueError(f'Send_Parameter: parameter {number} takes a whole number (int32), not {value!r}')
+            payload = int(value).to_bytes(4, 'big', signed=True)
         _canid = util.combine_2_can_id(self.node_id, self.SEND_PARAMETER_ID, 0)
-        data = bytearray([number]) + bytearray(int(value).to_bytes(4, 'big', signed=True))
+        data = bytearray([number]) + bytearray(payload)
         self.communication.send_can_message(message_id=_canid, data=data)
 
     def Send_Get_Parameter(self, number):
@@ -1042,6 +1120,8 @@ class SpectralCAN:
 
     def Send_Tone(self, freq_hz, current_mA=200, duration_ms=0, channel=0):
         # A tone now on channel 0-3 (up to 4 at once), loudness as a current (mA); duration 0 = until Send_Sound_Stop.
+        # Pitch 20 Hz to under half the loop rate (2500 Hz Spectral Micro, 3125 Hz STEPFOC); another pitch is
+        # silence (the UART #Tone answers "not played").
         self.Send_Sound(1, channel, int(round(freq_hz)), int(current_mA), int(duration_ms))
 
     def Send_Sound_Stop(self):
@@ -1050,6 +1130,7 @@ class SpectralCAN:
 
     def Send_Sound_Event(self, freq_hz, current_mA, wait_ms, channel=0):
         # Queue an event: set channel's pitch (0 = silence) and loudness, then wait (0: the next starts with it).
+        # A pitch outside 20 Hz to half the loop rate becomes a silence.
         self.Send_Sound(2, channel, int(round(freq_hz)), int(current_mA), int(wait_ms))
 
     def Send_Sound_Play(self):
@@ -1076,11 +1157,8 @@ class SpectralCAN:
 
     @classmethod
     def decode_features(cls, value):
-        # PARAM_FEATURES (79) as a list of names, then 'after calibration: ...' from bits 16-17.
-        names = [n for b, n in cls.FEATURES.items() if value is not None and value >> b & 1]
-        after = (value >> 16) & 3 if value is not None else 0
-        names.append('after calibration: ' + {0: 'nothing', 1: 'anti-cogging', 2: 'encoder table and anti-cogging'}.get(after, str(after)))
-        return names
+        # PARAM_FEATURES (79) as a list of names.
+        return [n for b, n in cls.FEATURES.items() if value is not None and value >> b & 1]
 
     def Send_Cogging_Mode(self, mode, scale=None):
         # 'off', 'harmonics' or 'table' (or 0-2); scale in percent (0-200) of the stored values. Saved by Send_Save_config().

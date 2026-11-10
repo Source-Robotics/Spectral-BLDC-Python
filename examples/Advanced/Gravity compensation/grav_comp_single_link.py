@@ -87,7 +87,7 @@ timer = Timer(interval=INTERVAL_S, warnings=False, precise=True)
 while timer.elapsed_time < 1100000:
 
     time1 = time.perf_counter()
-    Motor1.Send_data_pack_1(Position=None, Speed= None, Current = Commanded_Current)
+    Motor1.Send_data_pack_1(Position=None, Speed= None, Current = max(-2800, min(2800, Commanded_Current)))  # the drive's limit
 
     message, UnpackedMessageID = Communication1.receive_can_messages(timeout=None) 
 

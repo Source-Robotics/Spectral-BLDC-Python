@@ -9,7 +9,7 @@ while True:
 
     #Motor1.Send_Clear_Error()
     #Motor1.Send_Idle()
-    #Motor1.Send_CAN_ID(_CAN_ID = 255)
+    #Motor1.Send_CAN_ID(_CAN_ID = 1)   # 0-15
     #Motor1.Send_Limits(Velocity_limit=800000,Current_limit= 1500)
     #Motor1.Send_Current_Gains(KPIQ=2,KIIQ=1)
     #Motor1.Send_Velocity_Gains(KPV=0.009,KIV=0.0002)

@@ -174,7 +174,7 @@ def set_parameter(motor, number, value, check=True, timeout=0.3, others=()):
     """
     if number in motor.FLOAT_PARAMETERS:
         want = struct.unpack('>f', struct.pack('>f', float(value)))[0]       # as the drive will hold it
-        motor.Send_Parameter(number, struct.unpack('>i', struct.pack('>f', want))[0])
+        motor.Send_Parameter(number, want)
         if not check:
             return None
         got = get_parameter(motor, number, timeout=timeout, others=others)
@@ -257,17 +257,12 @@ def features(motor, timeout=0.3):
     """Parameter 79 decoded: what is in force and what runs, or None (firmware before 109).
 
     {name: bool} for every motor.FEATURES name ('calibrated', 'encoder table in use', 'anti-cogging on',
-    'calibration running', 'sound playing', ...), and 'after calibration': what runs after a successful
-    calibration ('nothing', 'anti-cogging', 'encoder table and anti-cogging'). The raw bits stay in
-    motor.parameters[79].
+    'calibration running', 'sound playing', ...). The raw bits stay in motor.parameters[79].
     """
     value = get_parameter(motor, motor.PARAM_FEATURES, timeout=timeout)
     if value is None:
         return None
-    out = {name: bool(value >> bit & 1) for bit, name in motor.FEATURES.items()}
-    after = (value >> 16) & 3
-    out['after calibration'] = motor.AFTER_CAL.get(after, str(after))
-    return out
+    return {name: bool(value >> bit & 1) for bit, name in motor.FEATURES.items()}
 
 
 def loop_rate(motor):

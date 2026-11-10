@@ -53,8 +53,8 @@ while(1):
     #Motor[0].Send_Respond_Encoder_data()
     #Motor[1].Send_Respond_Encoder_data()
     #Motor[0].Send_data_pack_PD(Position = 12000, Speed = 0, Current = 0)
-    Motor[0].Send_data_pack_1(Position = None,Speed = None, Current = int(T0))
-    Motor[1].Send_data_pack_1(Position = None,Speed = None, Current = int(T1))
+    Motor[0].Send_data_pack_1(Position = None,Speed = None, Current = max(-2800, min(2800, int(T0))))   # the drive's limit; the library refuses beyond 16 bits
+    Motor[1].Send_data_pack_1(Position = None,Speed = None, Current = max(-2800, min(2800, int(T1))))
 
     for i in range(1, 3):  # Loop 9-1=8 to check for received data
         message, UnpackedMessageID = Communication1.receive_can_messages(timeout=timeout_setting)

@@ -17,6 +17,10 @@ def value_text(number, value):
         return f"{value:.6g}"
     if number in (79, 80):                      # bit fields
         return f"0x{value & 0xFFFFFFFF:08X}"
+    if number == 84:                            # the git commit, bit 28 = built with uncommitted changes
+        return f"{value & 0xFFFFFFF:07x}" + (" (uncommitted changes)" if value >> 28 & 1 else "")
+    if number in (86, 87):                      # board and calibration ID
+        return f"{value & 0xFFFFFFFF:08X}"
     return str(value)
 
 
@@ -47,7 +51,6 @@ def show(motor, args):
     if f is not None:
         print("\nIn force and running (parameter 79):")
         print("  " + (", ".join(name for name, on in f.items() if on is True) or "nothing"))
-        print(f"  after a successful calibration: {f['after calibration']}")
 
     print("\nA few parameters:")
     for n in (motor.PARAM_KPP, motor.PARAM_KPV, motor.PARAM_KIV, motor.PARAM_CURRENT_LIMIT, motor.PARAM_WD_TIME,

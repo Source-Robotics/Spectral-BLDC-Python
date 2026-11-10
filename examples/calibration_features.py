@@ -29,7 +29,6 @@ def show(motor):
         return False
     print("In force and running (parameter 79): "
           + (", ".join(name for name, on in f.items() if on is True) or "nothing"))
-    print(f"  after a successful calibration: {f['after calibration']}")
     g = {n: helpers.get_parameter(motor, n) for n in (43, 45, 52, 54, 55, 57, 59, 60, 61, 62, 63)}
     print(f"  last encoder table run: {motor.ENCAL_STATES.get(g[52], g[52])}; "
           f"last anti-cogging run: {motor.COGCAL_STATES.get(g[43], g[43])}")
