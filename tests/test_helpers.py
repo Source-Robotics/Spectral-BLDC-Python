@@ -25,7 +25,7 @@ from Spectral_BLDC.Spectral_BLDC import CanMessage  # noqa: E402
 
 S = Spectral.SpectralCAN
 READ_ONLY = {23, 31, 32, 33, 36, 39, 40, 41, 42, 45, 47, 48, 54, 55, 57, 61, 62, 63, 66, 67, 68, 69, 70, 79, 80, 83,
-             84, 85, 86, 87, 89}
+             84, 85, 86, 87, 89, 93}
 
 
 class FakeDrive:

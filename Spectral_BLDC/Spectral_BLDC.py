@@ -212,6 +212,13 @@ class SpectralCAN:
                                      # -1 = wherever the code gets there (default, RAM). A bench diagnostic
     PARAM_SENSE_SAMPLE_SEEN = 89     # Spectral Micro only, read-only: the PWM count of the last reading, +65536 while
                                      # counting down
+    # Firmware 110: what #Rstint, #Term and #Gripper set over UART, and the gripper's stroke. A 109 drive does not
+    # know these numbers (get_parameter gives None). The three switches take 0 or 1 and are saved by Save config.
+    PARAM_RSTINT = 90                # 1: zero the velocity and current integrators on every setpoint command
+    PARAM_THERMISTOR = 91            # 1: the thermistor measurement is on
+    PARAM_GRIPPER_MODE = 92          # 1: gripper mode, in force at once; written only while the drive is idle
+    PARAM_GRIPPER_STROKE = 93        # read-only: the gripper's stroke between positions 0 and 255, ticks;
+                                     # 0 = not calibrated since power-up
     SOUND_QUEUE_FREE = 31            # events the drive's queue holds
     SOUND_BUFFER = 1023              # samples the drive's buffer holds
     # The encoder table on the drive (firmware 2026-11 batch 9): one shaft turn each way open loop, a 128-entry
@@ -263,7 +270,9 @@ class SpectralCAN:
                        81: 'sound limit mV', 82: 'sound axis (0 d, 1 q)', 83: 'stack never used, bytes',
                        84: 'build: git commit (bit 28 = uncommitted changes)', 85: 'build: Unix time',
                        86: 'board ID', 87: 'calibration ID',
-                       88: 'sense sample point, TIM2 (Spectral)', 89: 'sense sample seen, TIM2 (Spectral)'}
+                       88: 'sense sample point, TIM2 (Spectral)', 89: 'sense sample seen, TIM2 (Spectral)',
+                       90: 'reset the integrators on every setpoint (0/1)', 91: 'thermistor measurement (0/1)',
+                       92: 'gripper mode (0/1, only while idle)', 93: 'gripper stroke, ticks (0 = not calibrated)'}
     # The gripper reply's object-detection value (Gripper_mode in both firmwares)
     GRIPPER_OBJECT_DETECTION = {0: 'moving, or no contact', 1: 'stopped against an object, negative current (closing)',
                                 2: 'stopped against an object, positive current (opening)', 3: 'at position'}
