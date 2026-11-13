@@ -96,14 +96,21 @@ loop or while another thread receives from the same bus. They are tested offline
 
 | Product | Firmware | Library | Repository |
 |---|---|---|---|
-| Spectral Micro BLDC controller | 109 | 1.21 or newer | [Spectral-Micro-BLDC-controller](https://github.com/Source-Robotics/Spectral-Micro-BLDC-controller) |
-| STEPFOC stepper controller | 109 | 1.21 or newer | [STEPFOC-stepper-controller](https://github.com/Source-Robotics/STEPFOC-stepper-controller) |
+| Spectral Micro BLDC controller | 110 | 1.22 or newer (1.21 works; it reads 90-93 by number) | [Spectral-Micro-BLDC-controller](https://github.com/Source-Robotics/Spectral-Micro-BLDC-controller) |
+| STEPFOC stepper controller | 110 | 1.22 or newer (1.21 works; it reads 90-93 by number) | [STEPFOC-stepper-controller](https://github.com/Source-Robotics/STEPFOC-stepper-controller) |
 | SSG-48 adaptive electric gripper | Spectral Micro firmware | as for Spectral Micro | [SSG-48-adaptive-electric-gripper](https://github.com/Source-Robotics/SSG-48-adaptive-electric-gripper) |
 | MSG compliant AI stepper gripper | STEPFOC firmware | as for STEPFOC | [MSG-compliant-AI-stepper-gripper](https://github.com/Source-Robotics/MSG-compliant-AI-stepper-gripper) |
 
 Older firmware: the compatibility pages of the
 [Spectral Micro](https://docs.source-robotics.com/Spectral-BLDC-docs/latest/appendix/compatibility/) and
 [STEPFOC](https://docs.source-robotics.com/STEPFOC-docs/latest/appendix/compatibility/) manuals.
+
+## Firmware 110
+
+Firmware 110 adds four parameters, named from 1.22: `PARAM_RSTINT` (90, `#Rstint`), `PARAM_THERMISTOR` (91, `#Term`),
+`PARAM_GRIPPER_MODE` (92, `#Gripper`, written only while the drive is idle), each 0 or 1 and kept by
+`Send_Save_config()`, and `PARAM_GRIPPER_STROKE` (93, read only: the gripper's stroke in ticks, 0 until calibrated).
+Brake or coast when idle (parameter 18) is kept by a save from 110 on. A 109 drive answers 90-93 as unknown.
 
 ## Firmware 109
 
